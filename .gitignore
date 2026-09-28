@@ -1,0 +1,9 @@
+node_modules
+.DS_Store
+*.local
+
+# Firebase (emuladores e cache)
+*-debug.log
+.firebase/
+.env
+.env.local

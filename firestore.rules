@@ -1,0 +1,247 @@
+rules_version = '2';
+
+// Controle de acesso da plataforma. Espelha src/core/permissoes.js; aqui é que
+// a proteção vale de verdade (no navegador tudo pode ser burlado).
+//
+// Papéis ficam em usuarios/{uid}.role ("aluno" | "moderador"); só o moderador
+// muda perfis. Registros históricos (questões, simulados, sessões de estudo):
+// o aluno corrige/apaga os próprios só nas primeiras 24 h, e toda correção ou
+// exclusão precisa gravar um log no mesmo lote (ultimoLogId / logs/rm_<id>).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function doc(caminho) { return path('/databases/' + database + '/documents/' + caminho); }
+    function logado() { return request.auth != null; }
+    function temPerfil() { return logado() && exists(doc('usuarios/' + request.auth.uid)); }
+    function perfil() { return get(doc('usuarios/' + request.auth.uid)).data; }
+    function ativo() { return temPerfil() && perfil().get('ativo', true) != false; }
+    function moderador() { return ativo() && perfil().role == 'moderador'; }
+    function aluno() { return ativo() && perfil().role == 'aluno'; }
+    function proprio(alunoId) { return aluno() && request.auth.uid == alunoId; }
+    function podeVer(alunoId) { return moderador() || proprio(alunoId); }
+    // documento com alunoId dentro: quem pode ver o aluno lê; documento que
+    // não existe (ex.: acabou de ser apagado) só devolve "não existe"
+    function podeLerRegistro() { return resource == null ? ativo() : podeVer(resource.data.alunoId); }
+
+    function novo() { return request.resource.data; }
+    function antigo() { return resource.data; }
+    function mudou() { return novo().diff(antigo()).affectedKeys(); }
+    function soMuda(campos) { return mudou().hasOnly(campos); }
+    function recente() { return request.time < antigo().criadoEm + duration.value(24, 'h'); }
+
+    // log novo, gravado no mesmo lote, sobre este aluno
+    function logNoLote(logId, alunoId) {
+      return logId is string
+        && !exists(doc('logs/' + logId))
+        && existsAfter(doc('logs/' + logId))
+        && getAfter(doc('logs/' + logId)).data.alunoId == alunoId;
+    }
+    // alteração de registro: aponta um log novo
+    function alteracaoRegistrada(alunoId) {
+      return novo().get('ultimoLogId', null) != antigo().get('ultimoLogId', null)
+        && logNoLote(novo().ultimoLogId, alunoId);
+    }
+    // exclusão de registro: logs/rm_<id> no mesmo lote
+    function exclusaoRegistrada(id, alunoId) { return logNoLote('rm_' + id, alunoId); }
+
+    function inteiroMin(v, min) { return v is int && v >= min; }
+    function contagensValidas(d) {
+      return inteiroMin(d.total, 1) && inteiroMin(d.acertos, 0) && inteiroMin(d.erros, 0) && d.acertos + d.erros <= d.total;
+    }
+    // "YYYY-MM-DD" de um instante em UTC (as datas do app são locais; a folga
+    // de 14 h cobre qualquer fuso, então só barra data de fato no futuro)
+    function dois(n) { return n < 10 ? '0' + string(n) : string(n); }
+    function dataUTC(t) { return string(t.year()) + '-' + dois(t.month()) + '-' + dois(t.day()); }
+    function naoFutura(d) { return d is string && d <= dataUTC(request.time + duration.value(14, 'h')); }
+    function autoria(d) { return d.criadoPor == request.auth.uid && d.criadoEm == request.time; }
+    function imutaveis(campos) { return !mudou().hasAny(campos); }
+
+    /* ---------- instalação e configuração ---------- */
+
+    match /config/instalacao {
+      allow read: if true;
+      // primeiro moderador: só enquanto não houver instalação
+      allow create: if logado()
+        && novo().moderadorId == request.auth.uid
+        && getAfter(doc('usuarios/' + request.auth.uid)).data.role == 'moderador';
+      allow update, delete: if false;
+    }
+    match /config/boasVindas { allow read: if true; allow write: if moderador(); }
+    match /config/textos { allow read: if true; allow write: if moderador(); }
+    match /config/{outro} {
+      allow read: if ativo();
+      allow write: if moderador() && outro != 'instalacao';
+    }
+
+    /* ---------- pessoas ---------- */
+
+    match /usuarios/{uid} {
+      allow read: if (logado() && request.auth.uid == uid) || moderador();
+      allow create: if (moderador() && novo().role == 'aluno')
+        || (logado() && request.auth.uid == uid && novo().role == 'moderador'
+            && !exists(doc('config/instalacao'))
+            && getAfter(doc('config/instalacao')).data.moderadorId == uid);
+      allow update: if moderador()
+        || (logado() && request.auth.uid == uid && soMuda(['ultimoAcessoEm']) && novo().ultimoAcessoEm == request.time);
+      allow delete: if false;
+    }
+
+    match /textosAluno/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow write: if moderador();
+    }
+
+    /* ---------- estrutura acadêmica e planos gerais ---------- */
+
+    match /areas/{id} { allow read: if ativo(); allow write: if moderador(); }
+    match /materias/{id} { allow read: if ativo(); allow write: if moderador(); }
+    match /topicos/{id} { allow read: if ativo(); allow write: if moderador(); }
+    match /subtopicos/{id} { allow read: if ativo(); allow write: if moderador(); }
+    match /vestibulares/{id} { allow read: if ativo(); allow write: if moderador(); }
+    match /cursos/{id} { allow read: if ativo(); allow write: if moderador(); }
+
+    match /modelosPlano/{id} { allow read, write: if moderador(); }
+
+    /* ---------- plano individual ---------- */
+
+    // O aluno só muda o que o moderador liberou em permissoesAluno, e sempre
+    // com log no mesmo lote. `materias` (incidência, matérias visíveis,
+    // tópicos) é só do moderador: a ordem que o aluno escolhe fica em
+    // ordemTopicos. Os campos do recálculo acompanham as mudanças liberadas;
+    // sozinhos, exigem a permissão "recalcular".
+    function planoDoAlunoOk(alunoId) {
+      let perm = antigo().get('permissoesAluno', {});
+      let m = mudou();
+      return m.hasOnly(['ordemTopicos', 'disponibilidade', 'ritmo', 'alocacaoSemanal', 'cronograma', 'fimPrevisto', 'recalculadoEm', 'atualizadoEm', 'ultimoLogId'])
+        && (!m.hasAny(['ordemTopicos']) || (perm.get('reordenar', false) == true && novo().ordemTopicos is map))
+        && (!m.hasAny(['disponibilidade']) || perm.get('disponibilidade', false) == true)
+        && (!m.hasAny(['ritmo']) || perm.get('ritmo', false) == true)
+        && (!m.hasAny(['alocacaoSemanal', 'cronograma', 'fimPrevisto']) || m.hasAny(['ordemTopicos', 'disponibilidade', 'ritmo']) || perm.get('recalcular', false) == true)
+        && logNoLote(novo().ultimoLogId, alunoId);
+    }
+
+    match /planos/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow create, delete: if moderador();
+      allow update: if moderador() || (proprio(alunoId) && planoDoAlunoOk(alunoId));
+    }
+
+    match /planosAnteriores/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if moderador();
+      allow update, delete: if false;
+    }
+
+    // Progresso acumulado: toda mudança do aluno aponta a sessão criada ou
+    // apagada no mesmo lote, ou um log (conclusão/reabertura de conteúdo).
+    function operacaoDeProgressoOk(alunoId) {
+      let op = novo().ultimaOperacao;
+      return (op.tipo == 'sessao' && !exists(doc('sessoesEstudo/' + op.id)) && existsAfter(doc('sessoesEstudo/' + op.id))
+              && getAfter(doc('sessoesEstudo/' + op.id)).data.alunoId == alunoId)
+        || (op.tipo == 'remocao' && exists(doc('sessoesEstudo/' + op.id)) && !existsAfter(doc('sessoesEstudo/' + op.id)))
+        || (op.tipo == 'log' && logNoLote(op.id, alunoId) && perfilPlanoPermite(alunoId, 'concluirItens'));
+    }
+    function perfilPlanoPermite(alunoId, permissao) {
+      return get(doc('planos/' + alunoId)).data.get('permissoesAluno', {}).get(permissao, false) == true;
+    }
+
+    match /progresso/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow create, update: if moderador() || (proprio(alunoId) && novo().alunoId == alunoId && operacaoDeProgressoOk(alunoId));
+      allow delete: if false;
+    }
+
+    // subtópicos que o aluno marcou como vistos (orientação, sem efeito no motor)
+    match /vistos/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow write: if moderador() || (proprio(alunoId) && (request.resource == null || novo().alunoId == alunoId)
+        && perfilPlanoPermite(alunoId, 'concluirItens'));
+    }
+
+    match /revisoes/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if moderador() || proprio(novo().alunoId);
+      allow update: if (moderador() || proprio(antigo().alunoId)) && soMuda(['sessoes']);
+      allow delete: if moderador() || proprio(antigo().alunoId);
+    }
+
+    /* ---------- semana e sessões de estudo ---------- */
+
+    match /semanas/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow write: if moderador() || (proprio(alunoId) && (request.resource == null || novo().alunoId == alunoId));
+    }
+
+    match /resumosSemana/{id} {
+      allow read: if podeLerRegistro();
+      allow create, update: if (moderador() || proprio(novo().alunoId)) && id == novo().alunoId + '_' + novo().semana;
+      allow delete: if false;
+    }
+
+    match /sessoesEstudo/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if (moderador() || proprio(novo().alunoId)) && autoria(novo()) && inteiroMin(novo().minutos, 1);
+      allow update: if false;
+      allow delete: if (moderador() || (proprio(antigo().alunoId) && recente())) && exclusaoRegistrada(id, antigo().alunoId);
+    }
+
+    /* ---------- questões e simulados ---------- */
+
+    match /questoes/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if (moderador() || proprio(novo().alunoId)) && autoria(novo()) && contagensValidas(novo()) && naoFutura(novo().data);
+      allow update: if (moderador() || (proprio(antigo().alunoId) && recente()))
+        && imutaveis(['alunoId', 'criadoEm', 'criadoPor']) && contagensValidas(novo()) && alteracaoRegistrada(antigo().alunoId);
+      allow delete: if (moderador() || (proprio(antigo().alunoId) && recente())) && exclusaoRegistrada(id, antigo().alunoId);
+    }
+
+    match /simulados/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if (moderador() || proprio(novo().alunoId)) && autoria(novo()) && contagensValidas(novo());
+      allow update: if (moderador() || (proprio(antigo().alunoId) && recente()))
+        && imutaveis(['alunoId', 'criadoEm', 'criadoPor']) && contagensValidas(novo()) && alteracaoRegistrada(antigo().alunoId);
+      allow delete: if (moderador() || (proprio(antigo().alunoId) && recente())) && exclusaoRegistrada(id, antigo().alunoId);
+    }
+
+    /* ---------- conteúdo ---------- */
+
+    match /materiais/{id} {
+      allow read: if moderador() || (ativo() && (resource == null || resource.data.publicado == true));
+      allow write: if moderador();
+    }
+
+    match /playlists/{id} {
+      allow read: if moderador() || (ativo() && (resource == null || resource.data.publicada == true));
+      allow write: if moderador();
+    }
+
+    match /progressoVideos/{alunoId} {
+      allow read: if podeVer(alunoId);
+      allow write: if moderador() || proprio(alunoId);
+    }
+
+    match /devolutivas/{id} {
+      allow read: if moderador() || (resource == null ? ativo() : (proprio(resource.data.alunoId) && resource.data.status == 'enviada'));
+      allow create, delete: if moderador();
+      allow update: if moderador()
+        || (proprio(antigo().alunoId) && antigo().status == 'enviada' && soMuda(['lida', 'lidaEm']) && novo().lida == true && novo().lidaEm == request.time);
+    }
+
+    match /notificacoes/{id} {
+      allow read: if podeLerRegistro();
+      allow create: if moderador() && novo().autorId == request.auth.uid && novo().lidaEm == null;
+      allow update: if proprio(antigo().alunoId) && antigo().lidaEm == null && soMuda(['lidaEm']) && novo().lidaEm == request.time;
+      allow delete: if false;
+    }
+
+    /* ---------- histórico ---------- */
+
+    match /logs/{id} {
+      allow read: if moderador() || (resource == null ? ativo() : proprio(resource.data.alunoId));
+      allow create: if ativo() && novo().autorId == request.auth.uid && novo().em == request.time
+        && (moderador() || novo().alunoId == request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}
