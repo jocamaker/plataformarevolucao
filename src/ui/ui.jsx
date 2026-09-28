@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { AlertCircle, Loader2, X } from "lucide-react";
 import { linhasDe, partesDe } from "../textos.js";
 
@@ -127,6 +127,23 @@ export function Dialogo({ aberto, aoFechar, titulo, largura = 480, children, cla
       )}
     </dialog>
   );
+}
+
+/* Campo de texto que o React não reescreve enquanto a pessoa digita.
+   Em teclados Android (visto no Galaxy Tab com teclado físico Samsung), a
+   palavra em composição recomeça quando o valor do campo é regravado, e o
+   acento apagava tudo o que vinha antes dele ("Equil" + "í" virava só "í").
+   Aqui o valor do estado só entra no campo quando muda por fora (ex.: nome do
+   PDF preenchendo o título) e o campo não está em uso. */
+export function Texto({ value, onChange, multilinha = false, ...resto }) {
+  const ref = useRef(null);
+  const valor = value ?? "";
+  useLayoutEffect(() => {
+    const n = ref.current;
+    if (n && n.value !== valor && document.activeElement !== n) n.value = valor;
+  }, [valor]);
+  const Tag = multilinha ? "textarea" : "input";
+  return <Tag ref={ref} defaultValue={valor} onChange={onChange} {...resto} />;
 }
 
 export function Campo({ rotulo, ajuda, erro, children }) {

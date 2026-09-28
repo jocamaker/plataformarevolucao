@@ -394,38 +394,41 @@ button.barras-linha:hover { background: var(--surface-2); }
   .envio-corpo { padding-left: 16px; }
 }
 
-/* ---------- Títulos em Outfit ----------
-   Outfit é a voz dos títulos: nome da página, cabeçalhos de seção, janelas,
-   cartões e a marca. Inter fica com o texto corrido, formulários e números
-   (tabulares); Instrument Serif segue só na palavra em destaque (<em>).
-   A Outfit já nasce mais fechada que o Inter, então o espaçamento negativo
-   herdado do Inter (-0.045em) é aliviado para as letras não se colarem. */
+/* ---------- Tipografia de títulos ----------
+   Três vozes, cada uma com um papel:
+   - Marcellus: tudo o que é caixa alta (rótulos acima dos títulos, categorias).
+   - Instrument Serif itálica: os títulos em caixa baixa (páginas, herói,
+     janelas, cartões). A palavra em destaque (<em>) segue na mesma letra e se
+     separa pela cor.
+   - Inter: texto corrido, formulários, botões e números.
+   A itálica tem olho menor que o Inter; font-size-adjust iguala a altura das
+   minúsculas, então os tamanhos definidos em cada tela continuam valendo.
+   Ela só existe no peso 400: sem isso o navegador inventaria um negrito. */
 
 h1, h2, h3, h4,
-.marca, .eyebrow, .subtitulo, .bloco-titulo,
+.subtitulo, .bloco-titulo,
 .replan-resumo strong, .professor strong, .destaques strong,
-.cartao-curso-corpo strong, .meta-materia {
-  font-family: var(--font-display);
+.cartao-curso-corpo strong, .meta-materia, .bloco-materia-nome {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-synthesis: none;
+  font-size-adjust: 0.5;
+  letter-spacing: 0.005em;
 }
-/* a palavra em itálico continua na serifada */
-h1 em, h2 em, h3 em { font-family: var(--font-serif); }
-
-/* grandes: título da página, herói e cabeçalhos de curso/redação */
 .titulo-pagina h1, .cine h1, .cabeca-playlist h1, .cabeca-redacao h1,
-.cabeca-editor-texto h1, .previa-app h2 {
-  font-weight: 500;
-  letter-spacing: -0.025em;
-}
-/* médios: seções, janelas, folhas */
-.bloco-titulo, .subtitulo, .dialogo-topo h2, .folha-topo h2, .grupo-textos > header h2,
-.palco-info h2, .replan-resumo strong, .professor strong, .destaques strong {
-  letter-spacing: -0.015em;
-}
-.dialogo-topo h2 { font-weight: 500; }
-/* pequenos: títulos de cartão */
-h3, .cartao-curso-corpo strong, .meta-materia, .folha-corpo h3 { letter-spacing: -0.005em; }
+.cabeca-editor-texto h1, .previa-app h2 { letter-spacing: -0.01em; line-height: 1.08; }
+.titulo-pagina h1 em, .cine h1 em { font-size: 1em; }
 
-/* rótulo acima do título: caixa alta mais aberta, a assinatura da seção */
-.eyebrow { font-weight: 500; letter-spacing: 0.16em; }
-
-.marca { letter-spacing: -0.01em; }
+/* caixa alta: Marcellus, aberta e em dourado */
+.eyebrow, .capa-categoria, .miniatura-lado small {
+  font-family: var(--font-caps);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: 0.18em;
+}
+.eyebrow { color: var(--ouro); }
+.secao > .eyebrow.perigo { color: var(--danger); }
+/* nome da matéria no cartão do edital: a itálica pede um corpo maior */
+.bloco-materia-nome { font-size: 20px; }
+@media (max-width: 560px) { .bloco-materia-nome { font-size: 18px; } }
