@@ -139,7 +139,9 @@ export function useAcao() {
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState(null);
   const vivo = useRef(true);
-  useEffect(() => () => { vivo.current = false; }, []);
+  // o StrictMode (dev) monta, desmonta e monta de novo: religa a cada montagem,
+  // senão o botão fica preso em "Enviando…" e o erro nunca aparece
+  useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
   const executar = useCallback(async (fn) => {
     setOcupado(true);
     setErro(null);

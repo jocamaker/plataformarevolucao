@@ -393,3 +393,39 @@ button.barras-linha:hover { background: var(--surface-2); }
   .arvore-topicos, .estrutura-filhos { padding-left: 10px; }
   .envio-corpo { padding-left: 16px; }
 }
+
+/* ---------- Títulos em Outfit ----------
+   Outfit é a voz dos títulos: nome da página, cabeçalhos de seção, janelas,
+   cartões e a marca. Inter fica com o texto corrido, formulários e números
+   (tabulares); Instrument Serif segue só na palavra em destaque (<em>).
+   A Outfit já nasce mais fechada que o Inter, então o espaçamento negativo
+   herdado do Inter (-0.045em) é aliviado para as letras não se colarem. */
+
+h1, h2, h3, h4,
+.marca, .eyebrow, .subtitulo, .bloco-titulo,
+.replan-resumo strong, .professor strong, .destaques strong,
+.cartao-curso-corpo strong, .meta-materia {
+  font-family: var(--font-display);
+}
+/* a palavra em itálico continua na serifada */
+h1 em, h2 em, h3 em { font-family: var(--font-serif); }
+
+/* grandes: título da página, herói e cabeçalhos de curso/redação */
+.titulo-pagina h1, .cine h1, .cabeca-playlist h1, .cabeca-redacao h1,
+.cabeca-editor-texto h1, .previa-app h2 {
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+/* médios: seções, janelas, folhas */
+.bloco-titulo, .subtitulo, .dialogo-topo h2, .folha-topo h2, .grupo-textos > header h2,
+.palco-info h2, .replan-resumo strong, .professor strong, .destaques strong {
+  letter-spacing: -0.015em;
+}
+.dialogo-topo h2 { font-weight: 500; }
+/* pequenos: títulos de cartão */
+h3, .cartao-curso-corpo strong, .meta-materia, .folha-corpo h3 { letter-spacing: -0.005em; }
+
+/* rótulo acima do título: caixa alta mais aberta, a assinatura da seção */
+.eyebrow { font-weight: 500; letter-spacing: 0.16em; }
+
+.marca { letter-spacing: -0.01em; }
