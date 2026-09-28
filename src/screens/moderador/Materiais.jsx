@@ -6,7 +6,7 @@ import { PDF_MAX_MB, fmtTamanho } from "../../core/validacao.js";
 import { TIPOS_MATERIAL } from "../../services/materiais.js";
 import { BarraFiltros, useFiltros } from "../../ui/Filtros.jsx";
 import { SeletorConteudo, SeletorProgramas } from "../../ui/Conteudo.jsx";
-import { Botao, Campo, Carregando, Texto, Confirmar, Dialogo, MensagemErro, TituloPagina, Vazio } from "../../ui/ui.jsx";
+import { Botao, Campo, Carregando, Confirmar, Dialogo, MensagemErro, TituloPagina, Vazio } from "../../ui/ui.jsx";
 import { AbrirPdf, CartaoMaterial, filtrarMateriais } from "../aluno/Materiais.jsx";
 
 const ESTADOS = { validando: "Conferindo o arquivo…", enviando: "Enviando", salvando: "Salvando…", pronto: "Pronto." };
@@ -49,8 +49,8 @@ function FormMaterial({ material, aoFechar, programas }) {
             </div>
           )}
         </div>
-        <Campo rotulo="Título" erro={erros.titulo}><Texto className="entrada" value={f.titulo} onChange={(e) => { const titulo = e.target.value; setF((x) => ({ ...x, titulo })); }} /></Campo>
-        <Campo rotulo="Descrição (opcional)"><Texto multilinha className="entrada" rows={2} value={f.descricao} onChange={(e) => { const descricao = e.target.value; setF((x) => ({ ...x, descricao })); }} /></Campo>
+        <Campo rotulo="Título" erro={erros.titulo}><input className="entrada" value={f.titulo} onChange={(e) => setF({ ...f, titulo: e.target.value })} /></Campo>
+        <Campo rotulo="Descrição (opcional)"><textarea className="entrada" rows={2} value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} /></Campo>
         <div className="form-linha">
           <Campo rotulo="Tipo" erro={erros.tipo}>
             <select className="entrada" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>
@@ -61,7 +61,7 @@ function FormMaterial({ material, aoFechar, programas }) {
         </div>
         <SeletorConteudo valor={f} erros={erros} obrigatorio={{}} aoMudar={(v) => setF({ ...f, ...v })} />
         <SeletorProgramas programas={programas} valor={f.programaIds} aoMudar={(programaIds) => setF({ ...f, programaIds })} />
-        <Campo rotulo="Tags (opcional)" ajuda="Separadas por vírgula."><Texto className="entrada" value={f.tags} placeholder="citologia, membrana" onChange={(e) => { const tags = e.target.value; setF((x) => ({ ...x, tags })); }} /></Campo>
+        <Campo rotulo="Tags (opcional)" ajuda="Separadas por vírgula."><input className="entrada" value={f.tags} placeholder="citologia, membrana" onChange={(e) => setF({ ...f, tags: e.target.value })} /></Campo>
         <label className="checagem"><input type="checkbox" checked={f.publicado} onChange={(e) => setF({ ...f, publicado: e.target.checked })} />Publicado (os alunos veem)</label>
         {!Object.keys(erros).length && <MensagemErro erro={erro} />}
         <div className="dialogo-acoes">
