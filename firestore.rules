@@ -106,19 +106,36 @@ service cloud.firestore {
     /* ---------- plano individual ---------- */
 
     // O aluno só muda o que o moderador liberou em permissoesAluno, e sempre
-    // com log no mesmo lote. `materias` (incidência, matérias visíveis,
-    // tópicos) é só do moderador: a ordem que o aluno escolhe fica em
-    // ordemTopicos. Os campos do recálculo acompanham as mudanças liberadas;
-    // sozinhos, exigem a permissão "recalcular".
+    // com log no mesmo lote. `materias` (peso, matérias ativas, duração da
+    // meta, velocidade, tópicos), `limitesTempo`, `revisao` e as próprias
+    // permissões são só do moderador: a ordem que o aluno escolhe fica em
+    // ordemTopicos e ordemMaterias. Os campos do recálculo acompanham as
+    // mudanças liberadas; sozinhos, exigem a permissão "recalcular".
     function planoDoAlunoOk(alunoId) {
       let perm = antigo().get('permissoesAluno', {});
       let m = mudou();
-      return m.hasOnly(['ordemTopicos', 'disponibilidade', 'ritmo', 'alocacaoSemanal', 'cronograma', 'fimPrevisto', 'recalculadoEm', 'atualizadoEm', 'ultimoLogId'])
+      return m.hasOnly(['ordemTopicos', 'ordemMaterias', 'disponibilidade', 'ritmo', 'alocacaoSemanal', 'cronograma', 'fimPrevisto', 'recalculadoEm', 'atualizadoEm', 'ultimoLogId'])
         && (!m.hasAny(['ordemTopicos']) || (perm.get('reordenar', false) == true && novo().ordemTopicos is map))
-        && (!m.hasAny(['disponibilidade']) || perm.get('disponibilidade', false) == true)
+        && (!m.hasAny(['ordemMaterias']) || (perm.get('ordemMaterias', false) == true && novo().ordemMaterias is list))
+        && (!m.hasAny(['disponibilidade']) || (perm.get('disponibilidade', false) == true && disponibilidadeOk()))
         && (!m.hasAny(['ritmo']) || perm.get('ritmo', false) == true)
-        && (!m.hasAny(['alocacaoSemanal', 'cronograma', 'fimPrevisto']) || m.hasAny(['ordemTopicos', 'disponibilidade', 'ritmo']) || perm.get('recalcular', false) == true)
+        && (!m.hasAny(['alocacaoSemanal', 'cronograma', 'fimPrevisto']) || m.hasAny(['ordemTopicos', 'ordemMaterias', 'disponibilidade', 'ritmo']) || perm.get('recalcular', false) == true)
         && logNoLote(novo().ultimoLogId, alunoId);
+    }
+
+    // Tempo de estudo por dia: inteiro, em blocos de 30 min e dentro dos
+    // limites que o moderador definiu (limitesTempo; padrão 0 a 8 h). O mínimo
+    // semanal depende da estrutura e do progresso: fica no serviço.
+    function diaOk(d, k, lim) {
+      let v = d.get(k, 0);
+      return v is int && v % 30 == 0 && v >= lim.get('minDia', 0) && v <= lim.get('maxDia', 480);
+    }
+    function disponibilidadeOk() {
+      let d = novo().disponibilidade;
+      let lim = antigo().get('limitesTempo', {});
+      return d is map && d.keys().hasOnly(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'])
+        && diaOk(d, 'seg', lim) && diaOk(d, 'ter', lim) && diaOk(d, 'qua', lim) && diaOk(d, 'qui', lim)
+        && diaOk(d, 'sex', lim) && diaOk(d, 'sab', lim) && diaOk(d, 'dom', lim);
     }
 
     match /planos/{alunoId} {
@@ -159,6 +176,8 @@ service cloud.firestore {
         && perfilPlanoPermite(alunoId, 'concluirItens'));
     }
 
+    // O aluno muda o dia de uma sessão agendada ao mover a meta de revisão
+    // (sessoes inteiro, como já era para marcar realizada ou ignorada).
     match /revisoes/{id} {
       allow read: if podeLerRegistro();
       allow create: if moderador() || proprio(novo().alunoId);
@@ -168,6 +187,9 @@ service cloud.firestore {
 
     /* ---------- semana e sessões de estudo ---------- */
 
+    // A semana é gravada inteira pelo aluno; a validação das metas (blocos de
+    // 30, dias da semana atual, permissões moverMetas e ordemMaterias) é feita
+    // no serviço. Endurecer aqui exigiria uma Cloud Function (fora do escopo).
     match /semanas/{alunoId} {
       allow read: if podeVer(alunoId);
       allow write: if moderador() || (proprio(alunoId) && (request.resource == null || novo().alunoId == alunoId));

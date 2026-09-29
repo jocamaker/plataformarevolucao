@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { criarRepositorioLocal } from "../data/local.js";
 import { semearDemonstracao, SENHA_DEMO } from "../data/semente.js";
 import { ErroPermissao } from "../core/permissoes.js";
-import { itensDoPlano, estadoItem } from "../core/plano.js";
+import { DIAS } from "../core/nucleo.js";
+import { itensDoPlano, estadoItem, pesoDe, duracaoRevisao } from "../core/plano.js";
+import { permissaoDaOperacao } from "./planos.js";
 import { chaveDoDia } from "../core/semana.js";
 import { criarServicos } from "./index.js";
 import { ErroValidacao } from "./base.js";
@@ -77,7 +79,9 @@ describe("permissões reais nos serviços", () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("aluno@curso.com");
     await expect(t.s.planos.salvarModelo({ id: "modelo-fuvest", nome: "Hack" })).rejects.toThrow(ErroPermissao);
-    await expect(t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { minutosSemanais: 999 } })).rejects.toThrow(ErroPermissao);
+    await expect(t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { peso: 3 } })).rejects.toThrow(ErroPermissao);
+    await expect(t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { ativa: false } })).rejects.toThrow(ErroPermissao);
+    await expect(t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { limitesTempo: { minDia: 0, maxDia: 960 } } })).rejects.toThrow(ErroPermissao);
     await expect(t.s.planos.aplicarModelo(ana, "modelo-enem", { substituir: true })).rejects.toThrow(ErroPermissao);
   });
 
@@ -247,12 +251,15 @@ describe("semana, sessões e progresso", () => {
     await t.s.estudo.garantirSemana(ana);
     const plano = await t.repo.obter("planos", ana);
     await t.entrar("moderador@curso.com");
-    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { revisao: { intervalos: [2], duracaoMin: 25 } } });
-    const item = itensDoPlano(await t.repo.obter("planos", ana), await t.s.ctx.indice())[1];
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { revisao: { intervalos: [2] } } });
+    const planoNovo = await t.repo.obter("planos", ana);
+    const item = itensDoPlano(planoNovo, await t.s.ctx.indice())[1];
     await t.s.planos.concluirItem(ana, item.itemId);
     const semana = await t.repo.obter("semanas", ana);
     const rev = semana.metas.qua.find((m) => m.tipo === "revisao");
-    expect(rev).toMatchObject({ dia: "2026-09-30", minutos: 25, itemId: item.itemId });
+    const peso = pesoDe(planoNovo.materias.find((m) => m.materiaId === item.materiaId));
+    expect(rev).toMatchObject({ dia: "2026-09-30", minutos: duracaoRevisao(peso), itemId: item.itemId });
+    expect(semana.metas.qua[0]).toBe(rev); // revisões vêm primeiro no dia
     expect(plano).toBeTruthy();
   });
 
@@ -283,10 +290,12 @@ describe("plano individual: alterações, histórico e recálculo", () => {
     const progAntes = (await t.repo.obter("progresso", ana)).itens;
 
     await t.entrar("moderador@curso.com");
-    const previa = await t.s.planos.previa(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { minutosSemanais: 600 } });
-    expect(previa.alteracoes[0]).toMatchObject({ antes: expect.any(Number), depois: 600 });
+    const atual = pesoDe((await t.repo.obter("planos", ana)).materias.find((m) => m.materiaId === "biologia"));
+    const novo = atual === 3 ? 1 : 3;
+    const previa = await t.s.planos.previa(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { peso: novo } });
+    expect(previa.alteracoes[0]).toMatchObject({ antes: expect.stringMatching(/^\d · /), depois: novo === 3 ? "3 · Alta" : "1 · Baixa" });
     expect(previa.conteudosRemarcados).toBeGreaterThan(0);
-    const r = await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { minutosSemanais: 600 } }, { motivo: "reforço" });
+    const r = await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { peso: novo } }, { motivo: "reforço" });
     expect(r.mudou).toBe(true);
 
     expect(await t.repo.obter("sessoesEstudo", sessaoId)).toBeTruthy();
@@ -294,7 +303,7 @@ describe("plano individual: alterações, histórico e recálculo", () => {
     const semana = await t.repo.obter("semanas", ana);
     expect(semana.metas.seg.find((m) => m.id === meta.id)?.done).toBe(true);
     const [log] = await t.repo.listar("logs", [["alunoId", "==", ana], ["tipo", "==", "definirMateria"]]);
-    expect(log).toMatchObject({ autorNome: "Prof. Moderador", papel: "moderador", depois: 600, motivo: "reforço" });
+    expect(log).toMatchObject({ autorNome: "Prof. Moderador", papel: "moderador", depois: novo === 3 ? "3 · Alta" : "1 · Baixa", motivo: "reforço" });
   });
 
   it("não substitui o plano existente sem confirmação; com confirmação guarda o anterior", async () => {
@@ -356,13 +365,14 @@ describe("estrutura acadêmica", () => {
 });
 
 describe("jornadas práticas e edital por aluno", () => {
-  it("jornada em um passo: 9 matérias, todos os tópicos, horas divididas", async () => {
+  it("jornada em um passo: todas as matérias, todos os tópicos, peso 2", async () => {
     await t.entrar("moderador@curso.com");
     const id = await t.s.planos.criarJornada({ vestibularId: "fuvest", cursoId: "medicina", horasSemanais: 20 });
     const m = await t.repo.obter("modelosPlano", id);
     expect(m.nome).toBe("FUVEST · Medicina");
-    expect(m.materias).toHaveLength(9);
-    expect(m.materias.reduce((x, y) => x + y.minutosSemanais, 0)).toBe(1200);
+    expect(m.materias).toHaveLength((await t.repo.listar("materias")).length);
+    expect(m.materias.every((x) => x.peso === 2 && x.maxSessao === 60)).toBe(true);
+    expect(m).toMatchObject({ cargaReferencia: 1200, motorVersao: 2, revisao: { intervalos: [7, 15, 30] } });
     expect(m.materias.find((x) => x.materiaId === "geografia").topicos.map((x) => x.topicoId)).toEqual(["g1", "g2"]);
   });
 
@@ -386,7 +396,7 @@ describe("jornadas práticas e edital por aluno", () => {
   it("moderador oculta uma matéria do aluno: some das metas, fica no plano", async () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("moderador@curso.com");
-    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "historia", campos: { ativa: false, minutosSemanais: 240 } });
+    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "historia", campos: { ativa: false } });
     await t.entrar("aluno@curso.com");
     const est = await t.s.estudo.garantirSemana(ana);
     const materias = new Set(Object.values(est.metas).flat().map((m) => m.materiaId));
@@ -397,20 +407,25 @@ describe("jornadas práticas e edital por aluno", () => {
   it("levar a mudança da jornada aos alunos mantém o ajuste individual de cada um", async () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("moderador@curso.com");
-    // Ana ganhou um ajuste próprio em Biologia; História segue igual à jornada
-    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { minutosSemanais: 300 } });
+    const jornada = await t.repo.obter("modelosPlano", "modelo-fuvest");
+    const pj = (id) => pesoDe(jornada.materias.find((x) => x.materiaId === id));
+    const outro = (p, evitar = []) => [1, 2, 3].find((x) => x !== p && !evitar.includes(x));
+    // Ana ganhou um peso próprio em Biologia; História segue igual à jornada
+    const daAna = outro(pj("biologia"));
+    const daJornada = outro(pj("biologia"), [daAna]);
+    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { peso: daAna } });
     const r = await t.s.planos.alterarJornada("modelo-fuvest", [
-      { tipo: "definirMateria", materiaId: "biologia", campos: { minutosSemanais: 90 } },
-      { tipo: "definirMateria", materiaId: "historia", campos: { minutosSemanais: 45, maxSessao: 45, ativa: false } },
+      { tipo: "definirMateria", materiaId: "biologia", campos: { peso: daJornada } },
+      { tipo: "definirMateria", materiaId: "historia", campos: { peso: outro(pj("historia")), maxSessao: 90, ativa: false } },
       { tipo: "moverTopico", materiaId: "geografia", topicoId: "g2", passo: -1 },
     ], { propagar: true });
     expect(r).toMatchObject({ mudou: true, alunos: 1 });
     const modelo = await t.repo.obter("modelosPlano", "modelo-fuvest");
     const plano = await t.repo.obter("planos", ana);
     const m = (p, id) => p.materias.find((x) => x.materiaId === id);
-    expect(m(modelo, "biologia").minutosSemanais).toBe(90);
-    expect(m(plano, "biologia").minutosSemanais).toBe(300); // ajuste da Ana fica
-    expect(m(plano, "historia")).toMatchObject({ minutosSemanais: 45, maxSessao: 45, ativa: false });
+    expect(m(modelo, "biologia").peso).toBe(daJornada);
+    expect(m(plano, "biologia").peso).toBe(daAna); // ajuste da Ana fica
+    expect(m(plano, "historia")).toMatchObject({ peso: outro(pj("historia")), maxSessao: 90, ativa: false });
     expect(m(modelo, "geografia").topicos[0].topicoId).toBe("g2");
     expect(m(plano, "geografia").topicos[0].topicoId).toBe("g1"); // ordem fica só na jornada
     const logs = await t.repo.listar("logs", [["alunoId", "==", ana], ["motivo", "==", "Levado pela jornada"]]);
@@ -421,7 +436,8 @@ describe("jornadas práticas e edital por aluno", () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("moderador@curso.com");
     const antes = await t.repo.obter("planos", ana);
-    const r = await t.s.planos.alterarJornada("modelo-fuvest", { tipo: "definirMateria", materiaId: "fisica", campos: { prioridade: 1 } });
+    const fisica = pesoDe((await t.repo.obter("modelosPlano", "modelo-fuvest")).materias.find((x) => x.materiaId === "fisica"));
+    const r = await t.s.planos.alterarJornada("modelo-fuvest", { tipo: "definirMateria", materiaId: "fisica", campos: { peso: fisica === 1 ? 2 : 1 } });
     expect(r).toEqual({ mudou: true, alunos: 0 });
     expect((await t.repo.obter("planos", ana)).materias).toEqual(antes.materias);
   });
@@ -515,3 +531,130 @@ describe("áreas de materiais e provas para simulado", () => {
   });
 });
 
+
+describe("motor de metas: o que o aluno ajusta", () => {
+  const todasMetas = (est) => DIAS.flatMap((d) => est.metas[d.k]);
+
+  it("permissaoDaOperacao: nada de matéria para o aluno; disponibilidade, ordem e ritmo com permissão própria", () => {
+    for (const campos of [{ peso: 3 }, { ativa: false }, { maxSessao: 90 }, { ritmo: 1.25 }, {}]) {
+      expect(permissaoDaOperacao({ tipo: "definirMateria", materiaId: "biologia", campos })).toBeNull();
+    }
+    expect(permissaoDaOperacao({ tipo: "definirPlano", campos: { ordemMaterias: [] } })).toBe("ordemMaterias");
+    expect(permissaoDaOperacao({ tipo: "definirPlano", campos: { disponibilidade: {} } })).toBe("disponibilidade");
+    expect(permissaoDaOperacao({ tipo: "definirPlano", campos: { limitesTempo: {} } })).toBeNull();
+  });
+
+  it("tempo por dia: passos de 30, dentro dos limites e acima do mínimo semanal; a semana é refeita de hoje em diante", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    await t.s.estudo.garantirSemana(ana);
+    const disp = (await t.repo.obter("planos", ana)).disponibilidade;
+    const op = (d) => ({ tipo: "definirPlano", campos: { disponibilidade: d } });
+    await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 225 }))).rejects.toThrow(ErroValidacao);
+    await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 510 }))).rejects.toThrow(ErroValidacao);
+    const zero = Object.fromEntries(DIAS.map((d) => [d.k, 0]));
+    await expect(t.s.planos.alterar(ana, op({ ...zero, seg: 60 }))).rejects.toThrow(/pelo menos .* para caber ao menos um bloco de cada matéria/);
+    // quarta de 3 h para 4 h: o dia fecha em 4 h, tudo em blocos de 30
+    await t.s.planos.alterar(ana, op({ ...disp, qua: 240 }));
+    const est = await t.s.estudo.garantirSemana(ana);
+    expect(est.metas.qua.reduce((s, m) => s + m.minutos, 0)).toBe(240);
+    expect(todasMetas(est).every((m) => m.minutos % 30 === 0)).toBe(true);
+    // o moderador aperta os limites; fora deles, o aluno não grava
+    await t.entrar("moderador@curso.com");
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { limitesTempo: { minDia: 0, maxDia: 180 } } });
+    await t.entrar("aluno@curso.com");
+    await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 240 }))).rejects.toThrow(ErroValidacao);
+  });
+
+  it("mover metas: com a permissão, qualquer dia da semana a partir de hoje; sem ela, recusado", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    const est = await t.s.estudo.garantirSemana(ana);
+    const dom = est.metas.dom.find((m) => !m.done);
+    await t.s.estudo.moverMeta(ana, dom.id, "qua");
+    expect((await t.repo.obter("semanas", ana)).metas.qua.some((m) => m.id === dom.id)).toBe(true);
+    await expect(t.s.estudo.moverMeta(ana, dom.id, "2026-10-05")).rejects.toThrow(ErroValidacao); // semana seguinte
+    agora = new Date(2026, 8, 30, 10, 0); // quarta
+    await expect(t.s.estudo.moverMeta(ana, dom.id, "ter")).rejects.toThrow(/passou/);
+
+    await t.entrar("moderador@curso.com");
+    const plano = await t.repo.obter("planos", ana);
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { permissoesAluno: { ...plano.permissoesAluno, moverMetas: false } } });
+    await t.entrar("aluno@curso.com");
+    await expect(t.s.estudo.moverMeta(ana, dom.id, "sab")).rejects.toThrow(ErroPermissao);
+    // mover e reordenar não avisam o moderador nem gravam log
+    expect(await t.repo.listar("notificacoes")).toEqual([]);
+  });
+
+  it("mover uma revisão muda o dia da sessão no mesmo lote", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("moderador@curso.com");
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { revisao: { intervalos: [3] } } });
+    const item = itensDoPlano(await t.repo.obter("planos", ana), await t.s.ctx.indice())[0];
+    await t.s.planos.concluirItem(ana, item.itemId); // revisão na quinta, 01/10
+    await t.entrar("aluno@curso.com");
+    const est = await t.s.estudo.garantirSemana(ana);
+    const rev = est.metas.qui.find((m) => m.tipo === "revisao");
+    await t.s.estudo.moverMeta(ana, rev.id, "ter");
+    const [doc] = await t.repo.listar("revisoes", [["alunoId", "==", ana]]);
+    expect(doc.sessoes[0]).toMatchObject({ dia: "2026-09-29", status: "agendada" });
+    const depois = await t.s.estudo.garantirSemana(ana); // a sincronização não devolve a revisão à quinta
+    expect(depois.metas.ter.find((m) => m.revisaoId === doc.id)).toMatchObject({ dia: "2026-09-29" });
+    expect(depois.metas.qui.some((m) => m.revisaoId === doc.id)).toBe(false);
+  });
+
+  it("ordem das matérias e das metas do dia: só com a permissão ordemMaterias", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    const antes = await t.s.estudo.garantirSemana(ana);
+    const somaPor = (est) => { const o = {}; todasMetas(est).forEach((m) => { o[m.materiaId] = (o[m.materiaId] || 0) + m.minutos; }); return o; };
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { ordemMaterias: ["biologia"] } });
+    const depois = await t.s.estudo.garantirSemana(ana);
+    expect(somaPor(depois)).toEqual(somaPor(antes)); // só a ordem muda
+    DIAS.slice(0).forEach((d) => {
+      const ciclo = depois.metas[d.k].filter((m) => m.tipo === "ciclo");
+      if (ciclo.some((m) => m.materiaId === "biologia")) expect(ciclo[0].materiaId).toBe("biologia");
+    });
+    const [a, b] = depois.metas.ter;
+    await t.s.estudo.reordenarMeta(ana, "ter", b.id, -1);
+    expect((await t.repo.obter("semanas", ana)).metas.ter.slice(0, 2).map((m) => m.id)).toEqual([b.id, a.id]);
+
+    await t.entrar("moderador@curso.com");
+    const plano = await t.repo.obter("planos", ana);
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { permissoesAluno: { ...plano.permissoesAluno, ordemMaterias: false } } });
+    await t.entrar("aluno@curso.com");
+    await expect(t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { ordemMaterias: ["historia"] } })).rejects.toThrow(ErroPermissao);
+    await expect(t.s.estudo.reordenarMeta(ana, "ter", a.id, -1)).rejects.toThrow(ErroPermissao);
+  });
+
+  it("tempo extra: 30, 60, 90 ou 120 min", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    await t.s.estudo.garantirSemana(ana);
+    await expect(t.s.estudo.tempoExtra(ana, { materiaId: "biologia", minutos: 45 })).rejects.toThrow(ErroValidacao);
+    const dia = await t.s.estudo.tempoExtra(ana, { materiaId: "biologia", minutos: 90 });
+    const extra = (await t.repo.obter("semanas", ana)).metas[dia.k].find((m) => m.extra);
+    expect(extra.minutos).toBe(90);
+  });
+
+  it("revisão criada ao concluir: 30 min em matéria de peso 1, 60 min em peso 3", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("moderador@curso.com");
+    await t.s.planos.alterar(ana, [
+      { tipo: "definirMateria", materiaId: "biologia", campos: { peso: 1 } },
+      { tipo: "definirMateria", materiaId: "historia", campos: { peso: 3 } },
+    ]);
+    const itens = itensDoPlano(await t.repo.obter("planos", ana), await t.s.ctx.indice());
+    await t.s.planos.concluirItem(ana, itens.find((i) => i.materiaId === "biologia").itemId);
+    await t.s.planos.concluirItem(ana, itens.find((i) => i.materiaId === "historia").itemId);
+    const revs = await t.repo.listar("revisoes", [["alunoId", "==", ana]]);
+    expect(Object.fromEntries(revs.map((r) => [r.materiaId, r.duracaoMin]))).toEqual({ biologia: 30, historia: 60 });
+    // mudar o peso muda a duração das revisões ainda agendadas na semana
+    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "biologia", campos: { peso: 3 } });
+    await t.s.planos.alterar(ana, { tipo: "definirPlano", campos: { revisao: { intervalos: [1] } } });
+    await t.s.planos.reabrirItem(ana, itens.find((i) => i.materiaId === "biologia").itemId);
+    await t.s.planos.concluirItem(ana, itens.find((i) => i.materiaId === "biologia").itemId);
+    const est = await t.s.estudo.garantirSemana(ana);
+    expect(est.metas.ter.find((m) => m.tipo === "revisao" && m.materiaId === "biologia")?.minutos).toBe(60);
+  });
+});

@@ -9,7 +9,7 @@ import {
 import { ref, uploadBytes } from "firebase/storage";
 
 let env;
-const PERM = { concluirItens: true, reordenar: true, disponibilidade: true, ritmo: true, recalcular: true };
+const PERM = { concluirItens: true, reordenar: true, disponibilidade: true, moverMetas: true, ordemMaterias: true, ritmo: true, recalcular: true };
 const antigo = Timestamp.fromDate(new Date(Date.now() - 30 * 3600000));
 const hojeIso = new Date().toISOString().slice(0, 10);
 
@@ -39,7 +39,7 @@ beforeEach(async () => {
       setDoc(doc(d, "usuarios/ana"), { role: "aluno", nome: "Ana", ativo: true, vestibularId: "fuvest" }),
       setDoc(doc(d, "usuarios/carlos"), { role: "aluno", nome: "Carlos", ativo: true }),
       setDoc(doc(d, "usuarios/bloq"), { role: "aluno", nome: "Bloqueado", ativo: false }),
-      setDoc(doc(d, "planos/ana"), { alunoId: "ana", ritmo: 1, disponibilidade: { seg: 60 }, materias: [{ materiaId: "biologia" }], cronograma: {}, permissoesAluno: PERM }),
+      setDoc(doc(d, "planos/ana"), { alunoId: "ana", ritmo: 1, disponibilidade: { seg: 60 }, materias: [{ materiaId: "biologia", peso: 2, ativa: true }], cronograma: {}, permissoesAluno: PERM, limitesTempo: { minDia: 0, maxDia: 240 } }),
       setDoc(doc(d, "planos/bloq"), { alunoId: "bloq", permissoesAluno: PERM }),
       setDoc(doc(d, "questoes/q-antiga"), { ...questao("ana"), criadoEm: antigo }),
       setDoc(doc(d, "questoes/q-carlos"), { ...questao("carlos"), criadoEm: Timestamp.now() }),
@@ -169,7 +169,7 @@ describe("plano e progresso", () => {
     await assertSucceeds(ordem.commit());
     const materias = writeBatch(a);
     materias.set(doc(a, "logs/p6"), log("ana", "ana"));
-    materias.update(doc(a, "planos/ana"), { materias: [{ materiaId: "biologia", ativa: true, minutosSemanais: 900 }], ultimoLogId: "p6" });
+    materias.update(doc(a, "planos/ana"), { materias: [{ materiaId: "biologia", ativa: true, peso: 3 }], ultimoLogId: "p6" });
     await assertFails(materias.commit());
     const perm = writeBatch(a);
     perm.set(doc(a, "logs/p2"), log("ana", "ana"));
@@ -185,6 +185,58 @@ describe("plano e progresso", () => {
     cron.set(doc(a, "logs/p4"), log("ana", "ana"));
     cron.update(doc(a, "planos/ana"), { cronograma: {}, ultimoLogId: "p4" });
     await assertFails(cron.commit()); // apagar atrasos sem permissão de recalcular
+  });
+
+  it("aluno não muda peso nem matéria ativa, nem com log no lote", async () => {
+    const a = db("ana");
+    for (const materias of [[{ materiaId: "biologia", peso: 3, ativa: true }], [{ materiaId: "biologia", peso: 2, ativa: false }]]) {
+      const b = writeBatch(a);
+      b.set(doc(a, "logs/pp" + materias[0].peso + materias[0].ativa), log("ana", "ana"));
+      b.update(doc(a, "planos/ana"), { materias, ultimoLogId: "pp" + materias[0].peso + materias[0].ativa });
+      await assertFails(b.commit());
+    }
+    const lim = writeBatch(a);
+    lim.set(doc(a, "logs/pl"), log("ana", "ana"));
+    lim.update(doc(a, "planos/ana"), { limitesTempo: { minDia: 0, maxDia: 960 }, ultimoLogId: "pl" });
+    await assertFails(lim.commit());
+  });
+
+  it("ordem das matérias: com a permissão grava (lista), sem ela não", async () => {
+    const a = db("ana");
+    const ok = writeBatch(a);
+    ok.set(doc(a, "logs/o1"), log("ana", "ana"));
+    ok.update(doc(a, "planos/ana"), { ordemMaterias: ["biologia"], ultimoLogId: "o1" });
+    await assertSucceeds(ok.commit());
+    const mapa = writeBatch(a);
+    mapa.set(doc(a, "logs/o2"), log("ana", "ana"));
+    mapa.update(doc(a, "planos/ana"), { ordemMaterias: { biologia: 1 }, ultimoLogId: "o2" });
+    await assertFails(mapa.commit());
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "planos/ana"), { permissoesAluno: { ...PERM, ordemMaterias: false } }));
+    const sem = writeBatch(a);
+    sem.set(doc(a, "logs/o3"), log("ana", "ana"));
+    sem.update(doc(a, "planos/ana"), { ordemMaterias: ["biologia"], ultimoLogId: "o3" });
+    await assertFails(sem.commit());
+  });
+
+  it("tempo por dia: só múltiplos de 30 dentro dos limites do moderador", async () => {
+    const a = db("ana");
+    const dia = (disponibilidade, id) => {
+      const b = writeBatch(a);
+      b.set(doc(a, `logs/${id}`), log("ana", "ana"));
+      b.update(doc(a, "planos/ana"), { disponibilidade, ultimoLogId: id });
+      return b.commit();
+    };
+    await assertSucceeds(dia({ seg: 120, ter: 90, qua: 0 }, "d1"));
+    await assertFails(dia({ seg: 45 }, "d2")); // não é múltiplo de 30
+    await assertFails(dia({ seg: 270 }, "d3")); // passa do máximo (4 h)
+    await assertFails(dia({ seg: 60, feriado: 60 }, "d4")); // dia que não existe
+  });
+
+  it("aluno muda o dia de uma sessão de revisão agendada (mover a meta)", async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "revisoes/r1"), { alunoId: "ana", materiaId: "biologia", sessoes: [{ dia: "2026-10-04", status: "agendada" }] }));
+    await assertSucceeds(updateDoc(doc(db("ana"), "revisoes/r1"), { sessoes: [{ dia: "2026-10-03", status: "agendada" }] }));
+    await assertFails(updateDoc(doc(db("ana"), "revisoes/r1"), { materiaId: "fisica" }));
+    await assertFails(updateDoc(doc(db("carlos"), "revisoes/r1"), { sessoes: [] }));
   });
 
   it("progresso só muda junto com a sessão de estudo", async () => {

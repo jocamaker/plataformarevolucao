@@ -12,31 +12,46 @@
 
 import { apagarCampo, carimbo, ErroDados, incrementar, novoId } from "../data/contrato.js";
 import { DISP_PADRAO, DIAS } from "../core/nucleo.js";
-import { cicloDoPlano, conteudoDaVez, distribuirMinutos, estadoItem, itensDoPlano } from "../core/plano.js";
+import { BLOCO_MIN, TEMPO_EXTRA, arredBloco } from "../core/blocos.js";
+import {
+  conteudoDaVez, distribuirMinutos, duracaoRevisao, estadoItem, itensDoPlano, materiasDoMotor, minimoSemanal, pesoDaMateria,
+} from "../core/plano.js";
+import { migrarPlanoV2 } from "../core/migracao.js";
 import {
   acharMeta, adicionarTempoExtra, aplicarReplanejamento, lerIdRevisaoAvulsa, marcarMeta, moverMeta,
-  previaReplanejamento, reorganizarSemana, revisoesAtrasadas, semanaVigente, sincronizarRevisoes,
+  previaReplanejamento, reordenarNoDia, reorganizarSemana, revisoesAtrasadas, semanaVigente, sincronizarRevisoes,
 } from "../core/semana.js";
 import { ErroValidacao, idLogRemocao, opsDeLog, recentesPrimeiro } from "./base.js";
 import { opRevisoesDoItem, opsCancelarRevisoes } from "./planos.js";
+
+/* Plano que o motor usa: um plano gravado antes do motor de blocos é
+   convertido em memória (pesos, blocos, revisões), para o aluno já ver metas
+   de 30 min antes de o moderador gravar a migração. */
+export function contextoDoPlano(plano, ind, prog = {}) {
+  if (!plano || plano.motorVersao === 2) return plano;
+  return migrarPlanoV2(plano, { minimo: minimoSemanal(migrarPlanoV2(plano).plano, ind, prog) }).plano;
+}
 
 export function servicoEstudo(ctx) {
   const { repo } = ctx;
 
   async function contexto(alunoId) {
-    const [plano, progDoc, revisoes, doc, ind] = await Promise.all([
+    const [bruto, progDoc, revisoes, doc, ind] = await Promise.all([
       repo.obter("planos", alunoId), repo.obter("progresso", alunoId),
       repo.listar("revisoes", [["alunoId", "==", alunoId]]), repo.obter("semanas", alunoId), ctx.indice(),
     ]);
     const prog = progDoc?.itens || {};
+    const plano = contextoDoPlano(bruto, ind, prog);
     const itens = plano ? itensDoPlano(plano, ind) : [];
     return {
       plano, prog, ind, itens, revisoes, doc,
       motor: {
-        ciclo: plano ? cicloDoPlano(plano, ind) : { alocacoes: [] },
+        materias: plano ? materiasDoMotor(plano, ind, itens, prog) : [],
         disp: plano?.disponibilidade || DISP_PADRAO,
         inicio: plano?.inicio || null,
         revisoes,
+        ordemMaterias: plano?.ordemMaterias || [],
+        duracaoRevisao: (materiaId) => duracaoRevisao(pesoDaMateria(plano, materiaId)),
         conteudoDaVez: (materiaId) => conteudoDaVez(itens, prog, materiaId, ind),
       },
     };
@@ -44,13 +59,26 @@ export function servicoEstudo(ctx) {
 
   const semId = (doc) => { if (!doc) return null; const { id: _i, alunoId: _a, atualizadaEm: _t, ...est } = doc; return est; };
 
+  /* Semana gravada antes do motor de blocos: as metas abertas com minutos
+     fora dos blocos de 30 são refeitas uma vez (reorganizarSemana); metas
+     feitas e sessões ficam como estão (são histórico). */
+  function semanaNoMotorAtual(est, c, hoje) {
+    if (!est || est.motorVersao === 2) return est;
+    const fora = (m) => !m.done && m.minutos % BLOCO_MIN !== 0;
+    const pendentes = (est.pendentes || []).map((m) => (fora(m) ? { ...m, minutos: Math.max(BLOCO_MIN, arredBloco(m.minutos)) } : m));
+    const base = { ...est, pendentes, motorVersao: 2 };
+    return DIAS.some((d) => (est.metas?.[d.k] || []).some(fora)) ? reorganizarSemana(base, c.motor, hoje) : base;
+  }
+
   // semana válida hoje (+ revisões em dia) e as operações para gravá-la
   function vigente(c, alunoId) {
     const hoje = ctx.hoje();
-    const { est, mudou, resumo } = semanaVigente(semId(c.doc), c.motor, hoje);
-    const sinc = sincronizarRevisoes(est, c.revisoes, hoje);
+    const antiga = semId(c.doc);
+    const convertida = semanaNoMotorAtual(antiga, c, hoje);
+    const { est, mudou, resumo } = semanaVigente(convertida, c.motor, hoje);
+    const sinc = sincronizarRevisoes(est, c.revisoes, hoje, c.motor.duracaoRevisao);
     const ops = [];
-    if (mudou || sinc !== est) ops.push(opSemana(alunoId, sinc));
+    if (mudou || sinc !== est || convertida !== antiga) ops.push(opSemana(alunoId, sinc));
     if (resumo) ops.push({ tipo: "definir", colecao: "resumosSemana", id: `${alunoId}_${resumo.semana}`, dados: { ...resumo, alunoId, criadoEm: carimbo() } });
     return { est: sinc, ops };
   }
@@ -136,7 +164,7 @@ export function servicoEstudo(ctx) {
       }),
     }, ...efeitos.ops);
     if (!meta.avulsa) marcarMeta(est, meta.id, { done: true, hojeIso: hoje, sessaoId, conteudo });
-    const final = sincronizarRevisoes(est, [...c.revisoes, ...efeitos.novasRevisoes], hoje);
+    const final = sincronizarRevisoes(est, [...c.revisoes, ...efeitos.novasRevisoes], hoje, c.motor.duracaoRevisao);
     ops.push(opSemana(alunoId, final));
     await repo.lote(ops);
     return { feita: true, sessaoId, concluidos: efeitos.concluidos, revisoesCriadas: efeitos.revisoesCriadas.length };
@@ -154,7 +182,7 @@ export function servicoEstudo(ctx) {
     }
     if (!meta.avulsa) marcarMeta(est, meta.id, { done: false });
     const revisoesDepois = c.revisoes.filter((r) => !ops.some((o) => o.tipo === "remover" && o.colecao === "revisoes" && o.id === r.id));
-    ops.push(opSemana(alunoId, sincronizarRevisoes(est, revisoesDepois, ctx.hoje())));
+    ops.push(opSemana(alunoId, sincronizarRevisoes(est, revisoesDepois, ctx.hoje(), c.motor.duracaoRevisao)));
     ops.push(...opsDeLog(ctx, { alunoId, entidade: "estudo", entidadeId: sessao?.id || meta.id, ...(sessao ? { logId: idLogRemocao(sessao.id) } : {}) }, [{
       tipo: "desfazerMeta", descricao: `Desmarcou uma meta de ${c.ind.nomeMateria(meta.materiaId)} (${meta.minutos} min)`, antes: "feita", depois: "aberta",
     }]));
@@ -204,7 +232,7 @@ export function servicoEstudo(ctx) {
       const est = structuredClone(vig);
       const avulsa = lerIdRevisaoAvulsa(metaId);
       const meta = avulsa
-        ? revisoesAtrasadas(c.revisoes, ctx.hoje(), est).find((m) => m.id === metaId)
+        ? revisoesAtrasadas(c.revisoes, ctx.hoje(), est, c.motor.duracaoRevisao).find((m) => m.id === metaId)
         : acharMeta(est, metaId)?.meta;
       if (!meta) throw new ErroDados("Meta não encontrada. A semana pode ter virado; recarregue.", "nao-encontrado");
       return meta.done ? desfazerMeta(alunoId, c, est, meta, ops) : concluirMeta(alunoId, c, est, meta, ops);
@@ -242,7 +270,7 @@ export function servicoEstudo(ctx) {
       }, ...efeitos.ops];
       if (c.doc && efeitos.novasRevisoes.length) {
         const est = semId(c.doc);
-        const sinc = sincronizarRevisoes(est, [...c.revisoes, ...efeitos.novasRevisoes], hoje);
+        const sinc = sincronizarRevisoes(est, [...c.revisoes, ...efeitos.novasRevisoes], hoje, c.motor.duracaoRevisao);
         if (sinc !== est) ops.push(opSemana(alunoId, sinc));
       }
       await repo.lote(ops);
@@ -277,10 +305,11 @@ export function servicoEstudo(ctx) {
       return true;
     },
 
+    /* "Preciso de mais tempo": 30, 60, 90 ou 120 min no próximo dia com folga. */
     async tempoExtra(alunoId, { materiaId, topicoId, subtopicoId, itemId, minutos }) {
       ctx.exigir("registrar:estudo", { alunoId });
       const min = Number(minutos);
-      if (!Number.isInteger(min) || min < 10 || min > 240) throw new ErroValidacao({ minutos: "Minutos: entre 10 e 240." });
+      if (!TEMPO_EXTRA.includes(min)) throw new ErroValidacao({ minutos: "Escolha 30, 60, 90 ou 120 min." });
       const c = await contexto(alunoId);
       const { est: vig } = vigente(c, alunoId);
       const est = structuredClone(vig);
@@ -289,12 +318,40 @@ export function servicoEstudo(ctx) {
       return destino;
     },
 
-    async moverMeta(alunoId, metaId, de, para) {
+    /* Leva uma meta aberta para qualquer dia da semana atual, de hoje em
+       diante (permissão moverMetas). Revisão: o dia da sessão muda no mesmo
+       lote, para a sincronização não devolvê-la ao dia original. Sem log e
+       sem aviso ao moderador. */
+    async moverMeta(alunoId, metaId, para) {
       ctx.exigir("registrar:estudo", { alunoId });
       const c = await contexto(alunoId);
+      if (!c.plano) throw new ErroDados("Sem plano de estudos.", "sem-plano");
+      ctx.exigir("alterar:plano", { alunoId, plano: c.plano, permissao: "moverMetas" });
       const { est: vig } = vigente(c, alunoId);
       const est = structuredClone(vig);
-      if (!DIAS.some((d) => d.k === para) || !moverMeta(est, metaId, de, para)) return false;
+      const r = moverMeta(est, metaId, para, ctx.hoje());
+      if (!r.ok) throw new ErroValidacao({ dia: r.motivo });
+      const ops = [opSemana(alunoId, est)];
+      if (r.revisao) {
+        const rev = c.revisoes.find((x) => x.id === r.revisao.revisaoId);
+        if (rev) {
+          const sessoes = rev.sessoes.map((x) => (x.dia === r.revisao.de && x.status === "agendada" ? { ...x, dia: r.revisao.para } : x));
+          ops.push({ tipo: "atualizar", colecao: "revisoes", id: rev.id, dados: { sessoes } });
+        }
+      }
+      await repo.lote(ops);
+      return true;
+    },
+
+    /* Muda a posição de uma meta dentro do dia (permissão ordemMaterias). */
+    async reordenarMeta(alunoId, dia, metaId, passo) {
+      ctx.exigir("registrar:estudo", { alunoId });
+      const c = await contexto(alunoId);
+      if (!c.plano) throw new ErroDados("Sem plano de estudos.", "sem-plano");
+      ctx.exigir("alterar:plano", { alunoId, plano: c.plano, permissao: "ordemMaterias" });
+      const { est: vig } = vigente(c, alunoId);
+      const est = structuredClone(vig);
+      if (!DIAS.some((d) => d.k === dia) || !reordenarNoDia(est, dia, metaId, passo)) return false;
       await repo.lote([opSemana(alunoId, est)]);
       return true;
     },
@@ -305,7 +362,7 @@ export function servicoEstudo(ctx) {
       const c = await contexto(alunoId);
       if (!c.plano) return null;
       const { est: vig } = vigente(c, alunoId);
-      const est = sincronizarRevisoes(reorganizarSemana(vig, c.motor, ctx.hoje()), c.revisoes, ctx.hoje());
+      const est = sincronizarRevisoes(reorganizarSemana(vig, c.motor, ctx.hoje()), c.revisoes, ctx.hoje(), c.motor.duracaoRevisao);
       await repo.lote([opSemana(alunoId, est)]);
       return est;
     },
@@ -323,7 +380,7 @@ export function servicoEstudo(ctx) {
       const c = await contexto(alunoId);
       const { est: vig } = vigente(c, alunoId);
       if (vig.chave !== previa.chave) throw new ErroDados("A semana virou desde a prévia. Gere de novo.", "semana-mudou");
-      const est = sincronizarRevisoes(aplicarReplanejamento(vig, previa, ctx.hoje()), c.revisoes, ctx.hoje());
+      const est = sincronizarRevisoes(aplicarReplanejamento(vig, previa, ctx.hoje()), c.revisoes, ctx.hoje(), c.motor.duracaoRevisao);
       const { naoCouberam = [], totalRealocado = 0 } = previa.resumo;
       await repo.lote([
         opSemana(alunoId, est),
@@ -346,7 +403,7 @@ export function servicoEstudo(ctx) {
       const ops = [op];
       if (c.doc) {
         const est = semId(c.doc);
-        const sinc = sincronizarRevisoes(est, c.revisoes, ctx.hoje());
+        const sinc = sincronizarRevisoes(est, c.revisoes, ctx.hoje(), c.motor.duracaoRevisao);
         if (sinc !== est) ops.push(opSemana(alunoId, sinc));
       }
       await repo.lote(ops);
@@ -358,14 +415,14 @@ export function servicoEstudo(ctx) {
       const c = await contexto(alunoId);
       if (!c.plano || !c.doc) return;
       const { est: vig, ops } = vigente(c, alunoId);
-      const est = sincronizarRevisoes(reorganizarSemana(vig, c.motor, ctx.hoje()), c.revisoes, ctx.hoje());
+      const est = sincronizarRevisoes(reorganizarSemana(vig, c.motor, ctx.hoje()), c.revisoes, ctx.hoje(), c.motor.duracaoRevisao);
       await repo.lote([...ops.filter((o) => o.colecao !== "semanas"), opSemana(alunoId, est)]);
     },
     async sincronizarRevisoes(alunoId) {
       const c = await contexto(alunoId);
       if (!c.doc) return;
       const est = semId(c.doc);
-      const sinc = sincronizarRevisoes(est, c.revisoes, ctx.hoje());
+      const sinc = sincronizarRevisoes(est, c.revisoes, ctx.hoje(), c.motor.duracaoRevisao);
       if (sinc !== est) await repo.lote([opSemana(alunoId, sinc)]);
     },
   };

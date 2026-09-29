@@ -11,33 +11,63 @@
 
 import { apagarCampo, carimbo, ErroDados, novoId } from "../data/contrato.js";
 import {
-  alterarPlano, estadoItem, idItem, impactoAlteracao, itensDoPlano, modeloVazio, planoDoModelo,
-  recalcularPlano, revisoesDoItem, sugerirModelo,
+  PESO_PADRAO, alterarPlano, estadoItem, idItem, impactoAlteracao, itensDoPlano, limitesDe, minimoSemanal, modeloVazio,
+  pesoDaMateria, pesoDe, pesoValido, planoDoModelo, recalcularPlano, revisoesDoItem, sugerirModelo, validarDisponibilidade,
+  validarLimites,
 } from "../core/plano.js";
+import { DURACOES_META, MAX_SESSAO_PADRAO } from "../core/blocos.js";
 import { DISP_PADRAO } from "../core/nucleo.js";
 import { ErroValidacao, opsDeLog, porNome } from "./base.js";
 
-/* Qual permissão do aluno cada alteração exige (null = só o moderador). */
+/* Qual permissão do aluno cada alteração exige (null = só o moderador).
+   Peso, matérias ativas, duração da meta, velocidade da matéria e limites
+   de tempo (definirMateria, limitesTempo) nunca têm permissão de aluno. */
 export function permissaoDaOperacao(op) {
   if (op.tipo === "moverTopico") return "reordenar"; // grava só ordemTopicos
   if (op.tipo === "definirPlano") {
     const campos = Object.keys(op.campos || {});
-    if (campos.length && campos.every((c) => c === "disponibilidade")) return "disponibilidade";
-    if (campos.length && campos.every((c) => c === "ritmo")) return "ritmo";
+    for (const unico of ["disponibilidade", "ritmo", "ordemMaterias"]) {
+      if (campos.length && campos.every((c) => c === unico)) return unico;
+    }
   }
   return null;
 }
 
+/* Validação das alterações que o core não recusa sozinho: peso, duração da
+   meta, limites de tempo, tempo de estudo por dia e ordem das matérias. */
+export function validarOperacao(op, plano, ind, prog = {}) {
+  const erros = {};
+  if (op.tipo === "definirMateria") {
+    const c = op.campos || {};
+    if ("peso" in c && !pesoValido(c.peso)) erros.peso = "O peso é 1, 2 ou 3.";
+    if ("maxSessao" in c && !DURACOES_META.includes(c.maxSessao)) erros.maxSessao = "A duração máxima da meta vai de 30 a 180 min, de 30 em 30.";
+  }
+  if (op.tipo === "definirPlano") {
+    const c = op.campos || {};
+    if ("limitesTempo" in c) Object.assign(erros, validarLimites(c.limitesTempo));
+    if ("disponibilidade" in c && plano?.alunoId) {
+      Object.assign(erros, validarDisponibilidade(c.disponibilidade, c.limitesTempo || limitesDe(plano), minimoSemanal(plano, ind, prog)));
+    }
+    if ("ordemMaterias" in c) {
+      const ids = new Set((plano?.materias || []).map((m) => m.materiaId));
+      const l = c.ordemMaterias;
+      if (!Array.isArray(l) || !l.every((id) => typeof id === "string" && ids.has(id)) || new Set(l).size !== l.length) erros.ordemMaterias = "Ordem das matérias inválida.";
+    }
+  }
+  if (Object.keys(erros).length) throw new ErroValidacao(erros);
+}
+
 /* Revisões de um item recém-concluído: uma sessão por intervalo do plano. */
 export function opRevisoesDoItem(plano, item, alunoId, dataConclusao, origem) {
-  const sessoes = revisoesDoItem(dataConclusao, plano?.revisao).map((r) => ({ dia: r.dataPrevista, status: "agendada" }));
+  const sessoes = revisoesDoItem(dataConclusao, plano?.revisao, pesoDaMateria(plano, item.materiaId)).map((r) => ({ dia: r.dataPrevista, status: "agendada" }));
   if (!sessoes.length) return null;
   const id = novoId();
   return {
     tipo: "criar", colecao: "revisoes", id,
     dados: {
       alunoId, itemId: item.itemId, materiaId: item.materiaId, topicoId: item.topicoId, subtopicoId: item.subtopicoId || null,
-      concluidoEm: dataConclusao, duracaoMin: plano?.revisao?.duracaoMin || 20, sessoes, origem, criadoEm: carimbo(),
+      concluidoEm: dataConclusao, duracaoMin: revisoesDoItem(dataConclusao, plano?.revisao, pesoDaMateria(plano, item.materiaId))[0].duracaoMin,
+      sessoes, origem, criadoEm: carimbo(),
     },
   };
 }
@@ -59,8 +89,8 @@ export function opsCancelarRevisoes(revisoes, itemId, { soIds } = {}) {
 }
 
 /* Versão de uma alteração da jornada para o plano de um aluno (null = não levar). */
-const PADRAO_MATERIA = { prioridade: 2, ritmo: 1, ativa: true };
-const valorMateria = (m, k) => (k === "ativa" ? m?.ativa !== false : m?.[k] ?? PADRAO_MATERIA[k] ?? null);
+const PADRAO_MATERIA = { peso: PESO_PADRAO, maxSessao: MAX_SESSAO_PADRAO, ritmo: 1, ativa: true };
+const valorMateria = (m, k) => (k === "ativa" ? m?.ativa !== false : k === "peso" ? pesoDe(m) : m?.[k] ?? PADRAO_MATERIA[k] ?? null);
 export function opParaAluno(op, modeloAntes, plano) {
   if (["moverMateria", "moverTopico", "moverSubtopico"].includes(op.tipo)) return null;
   const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -72,7 +102,7 @@ export function opParaAluno(op, modeloAntes, plano) {
     return Object.keys(campos).length ? { ...op, campos } : null;
   }
   if (op.tipo === "definirPlano") {
-    const soDaJornada = ["nome", "descricao", "versao", "periodo"];
+    const soDaJornada = ["nome", "descricao", "versao", "periodo", "cargaReferencia"];
     const campos = Object.fromEntries(Object.entries(op.campos || {}).filter(([k]) => !soDaJornada.includes(k) && igual(plano[k], modeloAntes[k])));
     return Object.keys(campos).length ? { ...op, campos } : null;
   }
@@ -149,6 +179,7 @@ export function servicoPlanos(ctx, servicos) {
       if (!modelo) throw new ErroDados("Jornada não encontrada.", "nao-encontrado");
       const entradas = [];
       (Array.isArray(ops) ? ops : [ops]).forEach((op) => {
+        validarOperacao(op, modelo, ind);
         const r = alterarPlano(modelo, ind, op);
         modelo = r.plano;
         entradas.push(...r.log);
@@ -178,26 +209,20 @@ export function servicoPlanos(ctx, servicos) {
     sugerir: (modelos, aluno) => sugerirModelo(modelos.filter((m) => !m.arquivado), aluno),
 
     /* Jornada em um passo: todas as matérias do curso, com todos os tópicos,
-       e as horas da semana divididas por igual (depois é só ajustar). */
+       todas de peso 2 (depois é só ajustar os pesos). horasSemanais é só a
+       carga de referência das prévias; o tempo real é o de cada aluno. */
     async criarJornada({ nome, vestibularId, cursoId = "", dataAlvo = null, modalidade = "extensivo", horasSemanais = 20 }) {
       ctx.exigir("gerenciar:modelos");
       const ind = await ctx.indice();
-      const materias = ind.materias;
-      const total = Math.max(15, Math.round(horasSemanais * 60));
-      const base = Math.floor(total / materias.length / 15) * 15;
-      let sobra = total - base * materias.length;
       const nomePadrao = [ind.nomeVestibular(vestibularId), ind.nomeCurso(cursoId)].filter(Boolean).join(" · ");
       return this.salvarModelo({
         ...modeloVazio(),
         nome: String(nome || "").trim() || nomePadrao, vestibularId, cursoId, dataAlvo, modalidade,
-        materias: materias.map((m) => {
-          const extra = sobra >= 15 ? 15 : 0;
-          sobra -= extra;
-          return {
-            materiaId: m.id, minutosSemanais: base + extra, maxSessao: 60, prioridade: 2, ritmo: 1,
-            topicos: ind.topicosDaMateria(m.id).map((t) => ({ topicoId: t.id, subtopicos: ind.subtopicosDoTopico(t.id).map((x) => ({ subtopicoId: x.id })) })),
-          };
-        }),
+        cargaReferencia: Math.max(1, Math.round(Number(horasSemanais) || 20)) * 60,
+        materias: ind.materias.map((m) => ({
+          materiaId: m.id, peso: PESO_PADRAO, maxSessao: MAX_SESSAO_PADRAO, ritmo: 1,
+          topicos: ind.topicosDaMateria(m.id).map((t) => ({ topicoId: t.id, subtopicos: ind.subtopicosDoTopico(t.id).map((x) => ({ subtopicoId: x.id })) })),
+        })),
       });
     },
 
@@ -315,6 +340,7 @@ export function servicoPlanos(ctx, servicos) {
       const log = [];
       (Array.isArray(ops) ? ops : [ops]).forEach((op) => {
         ctx.exigir("alterar:plano", { alunoId, plano, permissao: permissaoDaOperacao(op) });
+        validarOperacao(op, novo, ind, prog);
         const r = alterarPlano(novo, ind, op);
         novo = r.plano;
         log.push(...r.log);
@@ -329,6 +355,7 @@ export function servicoPlanos(ctx, servicos) {
       const entradas = [];
       (Array.isArray(ops) ? ops : [ops]).forEach((op) => {
         ctx.exigir("alterar:plano", { alunoId, plano, permissao: permissaoDaOperacao(op) });
+        validarOperacao(op, novo, ind, prog);
         const r = alterarPlano(novo, ind, op);
         novo = r.plano;
         entradas.push(...r.log);
