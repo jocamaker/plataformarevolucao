@@ -20,7 +20,7 @@
 
 /* ---------- Fundo de ondas ---------- */
 
-.fundo-cores { position: relative; isolation: isolate; background: #5d6bee; }
+.fundo-cores { position: relative; isolation: isolate; background: #12264a; }
 /* Ondas lisas em SVG (vetor: nítido até em 8K, poucos KB). Duas camadas com
    a mesma caixa, para as geometrias coincidirem: as ondas, desfocadas pelo
    CSS (na placa de vídeo, sem as emendas do desfoque do SVG), e os fios
@@ -44,7 +44,7 @@
   min-height: 100vh;
   min-height: 100dvh;
   padding: 32px 16px max(24px, env(safe-area-inset-bottom));
-  color: #14122b;
+  color: #0a1628;
 }
 .login-cartao {
   display: grid;
@@ -55,7 +55,7 @@
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.85);
   background: #ffffff;
-  box-shadow: 0 30px 80px rgba(46, 30, 140, 0.28), 0 2px 8px rgba(46, 30, 140, 0.08);
+  box-shadow: 0 30px 80px rgba(3, 8, 20, 0.45), 0 2px 8px rgba(3, 8, 20, 0.12);
   animation: pop-in 0.5s var(--ease-out);
 }
 .login-acesso {
@@ -63,31 +63,31 @@
   flex-direction: column;
   justify-content: center;
   padding: 44px 40px;
-  background: linear-gradient(165deg, #efedff 0%, #ffffff 58%);
+  background: linear-gradient(165deg, #eef1f7 0%, #ffffff 58%);
 }
-.login-logo { --logo: 19px; --logo-mark: 26px; margin-bottom: 26px; color: #14122b; }
+.login-logo { --logo: 19px; --logo-mark: 26px; margin-bottom: 26px; color: #0a1628; }
 .login-titulo { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; }
-.login-sub { margin: 4px 0 22px; font-size: 14px; color: #5d5a73; }
+.login-sub { margin: 4px 0 22px; font-size: 14px; color: #56617a; }
 .login-form { display: grid; gap: 14px; }
-.login .campo > span { font-size: 13px; font-weight: 500; color: #2a2740; }
-.login .entrada { min-height: 46px; border: 1.5px solid #d7d8e6; border-radius: 10px; background: #ffffff; color: #14122b; }
-.login .entrada::placeholder { color: #9a98ad; }
-.login .entrada:focus { border-color: #5b5ef2; box-shadow: 0 0 0 3px rgba(91, 94, 242, 0.18); }
+.login .campo > span { font-size: 13px; font-weight: 500; color: #2e3a50; }
+.login .entrada { min-height: 46px; border: 1.5px solid #d6dbe5; border-radius: 10px; background: #ffffff; color: #0a1628; }
+.login .entrada::placeholder { color: #8e97a8; }
+.login .entrada:focus { border-color: #24467f; box-shadow: 0 0 0 3px rgba(36, 70, 127, 0.16); }
 .login-erro { font-size: 13px; color: #c0392b; }
 .login-botao {
   height: 46px;
   margin-top: 4px;
   border-radius: 10px;
-  background: #4f5cf6;
+  background: linear-gradient(180deg, #24467f 0%, #12264a 100%);
   color: #ffffff;
   font-size: 15px;
   font-weight: 600;
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
-.login-botao:hover:not(:disabled) { background: #3d4be4; box-shadow: 0 8px 20px rgba(79, 92, 246, 0.3); }
+.login-botao:hover:not(:disabled) { background: linear-gradient(180deg, #2d5595 0%, #173060 100%); box-shadow: 0 8px 20px rgba(18, 38, 74, 0.3), 0 0 0 1px rgba(217, 181, 107, 0.6); }
 .login-botao:disabled { opacity: 0.6; cursor: default; }
-.login-dica { margin-top: 16px; font-size: 12.5px; color: #6d6a82; }
-.login-dica a { color: #4f5cf6; text-decoration: underline; text-underline-offset: 3px; }
+.login-dica { margin-top: 16px; font-size: 12.5px; color: #636d82; }
+.login-dica a { color: #1f3d73; text-decoration: underline; text-underline-offset: 3px; }
 
 .login-marca {
   position: relative;
@@ -96,10 +96,10 @@
   gap: 12px;
   padding: 44px 38px 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #ffffff 0%, #fff4e8 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f7f0e1 100%);
 }
 .login-marca h2 { font-size: 32px; font-weight: 600; line-height: 1.12; letter-spacing: -0.035em; }
-.login-marca p { max-width: 34ch; font-size: 14.5px; color: #55526b; }
+.login-marca p { max-width: 34ch; font-size: 14.5px; color: #56617a; }
 .login-foto { position: relative; display: flex; flex: 1; align-items: flex-end; justify-content: center; min-height: 190px; margin-top: 6px; }
 .login-foto img { position: relative; z-index: 1; max-height: 300px; width: auto; border-radius: 14px 14px 0 0; object-fit: contain; }
 .login-aneis {
@@ -111,8 +111,8 @@
   transform: translateX(-50%);
   border-radius: 50%;
   background:
-    repeating-radial-gradient(circle, rgba(247, 146, 30, 0.2) 0 2px, transparent 2px 30px),
-    radial-gradient(circle, rgba(247, 146, 30, 0.38), rgba(247, 146, 30, 0.1) 55%, transparent 70%);
+    repeating-radial-gradient(circle, rgba(185, 145, 70, 0.24) 0 2px, transparent 2px 30px),
+    radial-gradient(circle, rgba(217, 181, 107, 0.42), rgba(217, 181, 107, 0.1) 55%, transparent 70%);
 }
 
 .login-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

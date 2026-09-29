@@ -300,7 +300,7 @@ export default function Inicio() {
           </div>
         </div>
         <ul className="saudacao-numeros">
-          <li style={{ "--cor-numero": "#4f5cf6" }}><span className="saudacao-icone"><CalendarCheck aria-hidden="true" /></span><b className="num">{c30.diasEstudados}</b><small>dias estudados nos últimos 30</small></li>
+          <li style={{ "--cor-numero": "#1f3d73" }}><span className="saudacao-icone"><CalendarCheck aria-hidden="true" /></span><b className="num">{c30.diasEstudados}</b><small>dias estudados nos últimos 30</small></li>
           <li style={{ "--cor-numero": "#e2761b" }}><span className="saudacao-icone"><Flame aria-hidden="true" /></span><b className="num">{c30.sequenciaAtual}</b><small>{c30.sequenciaAtual === 1 ? "dia seguido" : "dias seguidos"}</small></li>
           <li style={{ "--cor-numero": "#1e8f63" }}><span className="saudacao-icone"><Target aria-hidden="true" /></span><b className="num">{v.progressoPlano ? `${String(v.progressoPlano.pct).replace(".", ",")}%` : "–"}</b><small>do edital</small></li>
         </ul>

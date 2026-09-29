@@ -7,9 +7,11 @@
           textosAluno/{uid} { textos } */
 
 // cor do destaque na frase da tela de login (fundo branco)
-export const COR_DESTAQUE_PADRAO = "#5B4BE0";
+export const COR_DESTAQUE_PADRAO = "#9A7432";
 
 export const CORES_SUGERIDAS = [
+  { nome: "Dourado", cor: "#9A7432" },
+  { nome: "Marinho", cor: "#1F3D73" },
   { nome: "Violeta", cor: "#5B4BE0" },
   { nome: "Azul", cor: "#3F63F5" },
   { nome: "Laranja", cor: "#E2761B" },

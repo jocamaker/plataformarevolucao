@@ -11,10 +11,10 @@
   --fc-suave: var(--muted, #5f5f63);
   --fc-borda: var(--border, rgba(0, 0, 0, 0.1));
   --fc-borda-2: var(--border-strong, rgba(0, 0, 0, 0.22));
-  --fc-acento: #4f5cf6;
+  --fc-acento: var(--acento, #4f5cf6);
   --fc-acento-texto: #ffffff;
   --fc-perigo: #d93a3a;
-  --fc-foco: rgba(79, 92, 246, 0.35);
+  --fc-foco: color-mix(in srgb, var(--fc-acento) 35%, transparent);
   /* estados, como no Anki */
   --fc-novo: #2f6fed;
   --fc-aprendendo: #dc3b3b;
@@ -25,7 +25,7 @@
   --fc-dificil: #ea6a12;
   --fc-bom: #1f9d5b;
   --fc-facil: #3563e0;
-  --fc-g-linha: #4f5cf6; /* gráficos: a cor de destaque do módulo */
+  --fc-g-linha: var(--fc-acento); /* gráficos: a cor de destaque do módulo */
   --fc-grade-cor: rgba(0, 0, 0, 0.08);
   --fc-raio: 14px;
   --fc-sombra: 0 1px 2px rgba(16, 16, 40, 0.05), 0 10px 30px -12px rgba(16, 16, 40, 0.14);
@@ -35,10 +35,10 @@
   -webkit-tap-highlight-color: transparent;
 }
 [data-theme="dark"] .fc, .fc[data-theme="dark"] {
-  --fc-acento: #8b95ff;
-  --fc-acento-texto: #0b0b12;
+  --fc-acento: var(--acento, #8b95ff);
+  --fc-acento-texto: var(--acento-texto, #0b0b12);
   --fc-perigo: #ff6b6b;
-  --fc-foco: rgba(139, 149, 255, 0.45);
+  --fc-foco: color-mix(in srgb, var(--fc-acento) 45%, transparent);
   --fc-novo: #6f9bff;
   --fc-aprendendo: #ff6b6b;
   --fc-revisao: #4cc98a;
@@ -54,7 +54,7 @@
 
 .fc *, .fc *::before, .fc *::after { box-sizing: border-box; }
 .fc-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.fc button { font: inherit; color: inherit; }
+:where(.fc) button { font: inherit; color: inherit; }
 .fc :focus-visible { outline: 2px solid var(--fc-acento); outline-offset: 2px; }
 .fc svg { flex: none; }
 

@@ -391,7 +391,7 @@
 /* Dashboard: cartão de saudação (quem, data e três números) */
 .saudacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 28px; margin-bottom: 18px; padding: 20px 24px; }
 .saudacao-quem { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.saudacao-avatar { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 50%; background: var(--acento); color: #fff; font-size: 21px; font-weight: 600; }
+.saudacao-avatar { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 50%; background: var(--acento); color: var(--acento-texto); font-size: 21px; font-weight: 600; }
 .saudacao h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; }
 .saudacao-quem p { margin-top: 2px; font-size: 13.5px; color: var(--muted); }
 .saudacao-quem p::first-letter { text-transform: uppercase; }

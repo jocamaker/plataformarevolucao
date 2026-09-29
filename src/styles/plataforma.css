@@ -508,3 +508,39 @@ button.barras-linha:hover { background: var(--surface-2); }
 .falha-tela h2 { font-size: 18px; font-weight: 600; }
 .falha-tela p { color: var(--muted); font-size: 14px; line-height: 1.55; }
 .falha-tela code { max-width: 100%; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text-soft); font-size: 12.5px; overflow-wrap: anywhere; }
+
+/* ---------- Tipografia de títulos ----------
+   - Marcellus: tudo o que é caixa alta (rótulos acima dos títulos, categorias).
+   - Instrument Serif itálica: títulos em caixa baixa (páginas, saudação,
+     janelas, cartões). O *destaque* segue na mesma itálica, em dourado.
+   - Inter: texto corrido, formulários, botões e números.
+   A itálica tem olho menor que o Inter; font-size-adjust iguala a altura das
+   minúsculas, então os tamanhos de cada tela continuam valendo. Ela só existe
+   no peso 400: font-synthesis evita um negrito inventado pelo navegador. */
+
+h1, h2, h3, h4,
+.subtitulo, .bloco-titulo, .replan-resumo strong, .professor strong,
+.cartao-curso-corpo strong, .meta-materia, .bloco-materia-nome {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-synthesis: none;
+  font-size-adjust: 0.5;
+  letter-spacing: 0.005em;
+}
+.titulo-pagina h1 em { font-size: 1em; }
+
+/* nomes de matéria (edital e metas): a itálica pede um corpo maior */
+.bloco-materia-nome { font-size: 20px; }
+.meta-materia { font-size: 18px; }
+@media (max-width: 560px) { .bloco-materia-nome { font-size: 18px; } }
+
+/* caixa alta: Marcellus, aberta; os rótulos de seção em dourado */
+.eyebrow, .capa-categoria, .miniatura-lado small, .tile-area-rotulo, .fc-lat-titulo {
+  font-family: var(--font-caps);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: 0.18em;
+}
+.eyebrow { color: var(--ouro); }
+.secao > .eyebrow.perigo { color: var(--danger); }

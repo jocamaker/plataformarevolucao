@@ -1,21 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
-  <!-- Fundo da entrada: campo frio e luminoso (azul, anil e um toque de
-       água) com ondas lisas em diagonal. O CSS desfoca esta camada; os fios
+  <!-- Fundo da entrada: azul-marinho profundo com um brilho dourado baixo e
+       ondas lisas em diagonal. O CSS desfoca esta camada; os fios
        nítidos ficam em fundo-fios.svg, com a mesma geometria. -->
   <defs>
     <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7A88F8"/>
-      <stop offset="0.45" stop-color="#5D6BEE"/>
-      <stop offset="1" stop-color="#4C53DA"/>
+      <stop offset="0" stop-color="#24467F"/>
+      <stop offset="0.45" stop-color="#12264A"/>
+      <stop offset="1" stop-color="#070F1E"/>
     </linearGradient>
     <radialGradient id="luz" cx="0.2" cy="0.08" r="0.65">
-      <stop offset="0" stop-color="#F1F4FF" stop-opacity="0.6"/>
-      <stop offset="0.6" stop-color="#F1F4FF" stop-opacity="0.08"/>
-      <stop offset="1" stop-color="#F1F4FF" stop-opacity="0"/>
+      <stop offset="0" stop-color="#DCE6FA" stop-opacity="0.32"/>
+      <stop offset="0.6" stop-color="#DCE6FA" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#DCE6FA" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="agua" cx="0.06" cy="1" r="0.6">
-      <stop offset="0" stop-color="#63D6E8" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#63D6E8" stop-opacity="0"/>
+      <stop offset="0" stop-color="#D9B56B" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#D9B56B" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="brilho" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.04"/>
@@ -24,9 +24,9 @@
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.03"/>
     </linearGradient>
     <linearGradient id="sombra" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#3A3FC2" stop-opacity="0.05"/>
-      <stop offset="0.6" stop-color="#3A3FC2" stop-opacity="0.34"/>
-      <stop offset="1" stop-color="#3A3FC2" stop-opacity="0.18"/>
+      <stop offset="0" stop-color="#030812" stop-opacity="0.05"/>
+      <stop offset="0.6" stop-color="#030812" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#030812" stop-opacity="0.22"/>
     </linearGradient>
   </defs>
 
