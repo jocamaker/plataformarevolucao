@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ShieldAlert } from "lucide-react";
-import { useApp } from "../state/AppContext.jsx";
+import { rotaInicial, useApp } from "../state/AppContext.jsx";
 import { errosDeCampo, useAcao } from "../state/hooks.js";
 import { Botao, Campo, Carregando, Marca, MensagemErro } from "../ui/ui.jsx";
 
@@ -15,7 +15,7 @@ export function Instalacao() {
   const [erroSenha, setErroSenha] = useState("");
 
   useEffect(() => { s.auth.precisaInstalar().then(setPrecisa).catch(() => setPrecisa(false)); }, [s]);
-  if (usuario?.role) return <Navigate to="/boas-vindas" replace />;
+  if (usuario?.role) return <Navigate to={rotaInicial(usuario)} replace />;
   if (precisa === null) return <div className="tela-centro"><Carregando /></div>;
   if (!precisa) return <Navigate to="/entrar" replace />;
   const erros = errosDeCampo(erro);
@@ -28,7 +28,7 @@ export function Instalacao() {
   };
 
   return (
-    <div className="tela-centro">
+    <div className="tela-centro fundo-cores" data-theme="light">
       <form className="cartao form cartao-acesso" onSubmit={enviar} noValidate>
         <Marca />
         <h1 className="subtitulo">Primeiro acesso</h1>
@@ -47,7 +47,7 @@ export function Instalacao() {
 export function AcessoBloqueado() {
   const { usuario, sair } = useApp();
   return (
-    <div className="tela-centro">
+    <div className="tela-centro fundo-cores" data-theme="light">
       <div className="cartao form cartao-acesso">
         <ShieldAlert aria-hidden="true" className="icone-grande" />
         <h1 className="subtitulo">{usuario?.bloqueado ? "Acesso suspenso" : "Conta sem cadastro"}</h1>

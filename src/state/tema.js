@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
-const CHAVE = "aprova:tema";
+// Só guarda o tema quando a pessoa escolhe: quem nunca trocou fica no padrão
+// (claro). Chave nova porque a antiga gravava o escuro automaticamente.
+const CHAVE = "aprova:tema-escolhido";
 
 function inicial() {
-  try { return localStorage.getItem(CHAVE) === "light" ? "light" : "dark"; } catch { return "dark"; }
+  try { return localStorage.getItem(CHAVE) === "dark" ? "dark" : "light"; } catch { return "light"; }
 }
 
-// Tema das telas internas. Login e boas-vindas ficam sempre escuros (vídeo).
+// Tema das telas internas. A entrada (login) é sempre clara.
 export function useTema() {
   const [tema, setTema] = useState(inicial);
 
@@ -15,9 +17,12 @@ export function useTema() {
     raiz.dataset.theme = tema;
     raiz.style.background = tema === "light" ? "#f3f3f1" : "#000000";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", tema === "light" ? "#f3f3f1" : "#000000");
-    try { localStorage.setItem(CHAVE, tema); } catch { /* sem armazenamento */ }
   }, [tema]);
 
-  const alternar = useCallback(() => setTema((t) => (t === "light" ? "dark" : "light")), []);
+  const alternar = useCallback(() => setTema((t) => {
+    const novo = t === "light" ? "dark" : "light";
+    try { localStorage.setItem(CHAVE, novo); } catch { /* sem armazenamento: vale só nesta visita */ }
+    return novo;
+  }), []);
   return [tema, alternar];
 }

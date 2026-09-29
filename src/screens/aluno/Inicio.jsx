@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle, BellRing, BookOpen, Check, CheckCircle2, Clock4, FileQuestion, ListChecks, PenLine, RefreshCw, Zap,
+  AlertTriangle, BellRing, BookOpen, CalendarCheck, Check, CheckCircle2, Clock4, FileQuestion, Flame, ListChecks, PenLine, RefreshCw, Target, Zap,
 } from "lucide-react";
 import { DIAS, fmtMin } from "../../core/nucleo.js";
 import { useApp } from "../../state/AppContext.jsx";
 import { errosDeCampo, useAcao, useDevolutivas, useEu, useFrases, useNotificacoes } from "../../state/hooks.js";
 import { useVisaoAluno } from "../../state/aluno.js";
 import { NomeConteudo, SeletorConteudo } from "../../ui/Conteudo.jsx";
-import { Barra, Botao, Campo, Carregando, Dialogo, MensagemErro, TituloPagina, Vazio } from "../../ui/ui.jsx";
+import { Barra, Botao, Campo, Carregando, Dialogo, Frase, MensagemErro, Vazio } from "../../ui/ui.jsx";
 import { QuadroSemana } from "./Semana.jsx";
 import { FormQuestoes } from "../comum/Registros.jsx";
 import { AvisoLinha, LerAviso } from "./Avisos.jsx";
@@ -275,6 +275,8 @@ export default function Inicio() {
   const dataHoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const atrasadasAbertas = v.atrasadas.filter((m) => !m.done).length;
   const pct = v.totalHoje ? Math.round((v.feitasHoje / v.totalHoje) * 100) : 0;
+  const vest = v.ind.vestibular(v.aluno?.vestibularId);
+  const c30 = v.consistencia30;
 
   const alternar = (meta) => executar(async () => {
     const r = await s.estudo.alternarMeta(eu.id, meta.id);
@@ -289,25 +291,34 @@ export default function Inicio() {
 
   return (
     <>
-      <TituloPagina
-        eyebrow={dataHoje}
-        frase={t("painel.dashboard.titulo")}
-        direita={
-          <div className="titulo-direita">
-            <div className="filtros filtros--compacto" role="tablist" aria-label="Ver">
-              {VISOES.map(([k, nome]) => (
-                <button key={k} type="button" role="tab" className="filtro" aria-selected={visao === k} onClick={() => setParams(k === "hoje" ? {} : { ver: k }, { replace: true })}>{nome}</button>
-              ))}
-            </div>
-            {visao === "hoje" && v.totalHoje > 0 && (
-              <div className="progresso-dia">
-                <div className="num">{v.feitasHoje} de {v.totalHoje} metas</div>
-                <Barra valor={pct} />
-              </div>
-            )}
+      <section className="cartao saudacao" aria-label="Seu resumo">
+        <div className="saudacao-quem">
+          <span className="saudacao-avatar" aria-hidden="true">{(v.aluno?.nome || eu.nome || "?").charAt(0)}</span>
+          <div>
+            <h1><Frase texto={t("painel.dashboard.saudacao")} /></h1>
+            <p>{dataHoje}{vest ? ` · ${vest.nome}` : ""}</p>
           </div>
-        }
-      />
+        </div>
+        <ul className="saudacao-numeros">
+          <li style={{ "--cor-numero": "#4f5cf6" }}><span className="saudacao-icone"><CalendarCheck aria-hidden="true" /></span><b className="num">{c30.diasEstudados}</b><small>dias estudados nos últimos 30</small></li>
+          <li style={{ "--cor-numero": "#e2761b" }}><span className="saudacao-icone"><Flame aria-hidden="true" /></span><b className="num">{c30.sequenciaAtual}</b><small>{c30.sequenciaAtual === 1 ? "dia seguido" : "dias seguidos"}</small></li>
+          <li style={{ "--cor-numero": "#1e8f63" }}><span className="saudacao-icone"><Target aria-hidden="true" /></span><b className="num">{v.progressoPlano ? `${String(v.progressoPlano.pct).replace(".", ",")}%` : "–"}</b><small>do edital</small></li>
+        </ul>
+      </section>
+
+      <div className="barra-dia">
+        <div className="filtros filtros--compacto" role="tablist" aria-label="Ver">
+          {VISOES.map(([k, nome]) => (
+            <button key={k} type="button" role="tab" className="filtro" aria-selected={visao === k} onClick={() => setParams(k === "hoje" ? {} : { ver: k }, { replace: true })}>{nome}</button>
+          ))}
+        </div>
+        {visao === "hoje" && v.totalHoje > 0 && (
+          <div className="progresso-dia">
+            <div className="num">{v.feitasHoje} de {v.totalHoje} metas de hoje</div>
+            <Barra valor={pct} />
+          </div>
+        )}
+      </div>
 
       {novos.length > 0 && (
         <section className="secao avisos-novos" aria-label="Avisos novos">
@@ -332,7 +343,6 @@ export default function Inicio() {
           <div className="faixa">
             <span>
               Hoje: <b className="num">{fmtMin(v.minutosHoje)}</b> estudados{v.questoesHoje ? <>, <b className="num">{v.questoesHoje}</b> questões</> : null}
-              {" · "}<b className="num">{v.consistencia30.diasEstudados}</b> dos últimos 30 dias
             </span>
             {v.atrasos?.quantidade > 0 && (
               <Link to="/aluno/edital" className="faixa-atraso"><AlertTriangle aria-hidden="true" />{v.atrasos.quantidade} {v.atrasos.quantidade === 1 ? "tópico atrasado" : "tópicos atrasados"}</Link>

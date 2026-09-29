@@ -8,16 +8,13 @@ import { BOAS_VINDAS_PADRAO } from "../../data/semente.js";
 import {
   COR_DESTAQUE_PADRAO, CORES_SUGERIDAS, GRUPOS, TEXTOS, VARIAVEIS, grupoDoCurso, grupoDoVestibular, preencher, primeiroNome, saudacao, textoDe,
 } from "../../textos.js";
-import { TituloCinema } from "../../ui/Cinema.jsx";
 import { Abas, Botao, Campo, Carregando, Frase, MensagemErro, TituloPagina } from "../../ui/ui.jsx";
 import { Bloco } from "../Paginas.jsx";
 
+// cor: só a frase da tela de login usa a cor escolhida; os títulos do painel usam o acento
 function Previa({ tipo, texto, cor }) {
-  if (tipo === "cinema") {
-    return <div className="cine previa-cine" data-theme="dark" style={{ "--destaque": cor }} aria-label="Prévia"><TituloCinema texto={texto} animar={false} /></div>;
-  }
-  if (tipo === "titulo") return <div className="previa-app" aria-label="Prévia"><h2><Frase texto={texto} /></h2></div>;
-  return null;
+  if (tipo !== "titulo") return null;
+  return <div className={`previa-app${cor ? " previa-login" : ""}`} aria-label="Prévia" style={cor ? { "--destaque": cor } : undefined}><h2><Frase texto={texto} /></h2></div>;
 }
 
 function CampoTexto({ chave, valor, fallback, aoMudar, aoLimpar, rotuloLimpar, vars, cor }) {
@@ -36,7 +33,7 @@ function CampoTexto({ chave, valor, fallback, aoMudar, aoLimpar, rotuloLimpar, v
         <input id={`t-${chave}`} className="entrada" value={valor ?? fallback} onChange={(e) => aoMudar(e.target.value)} />
       )}
       {valor == null && <small className="previa-linha">Herdado. Edite para personalizar nesta camada.</small>}
-      <Previa tipo={def.tipo} texto={preencher(efetivo, vars)} cor={cor} />
+      <Previa tipo={def.tipo} texto={preencher(efetivo, vars)} cor={chave.startsWith("inicial.") ? cor : undefined} />
       {(def.tipo === "linha" || def.tipo === "paragrafo") && /\{\w+\}/.test(efetivo) && <p className="previa-linha">Fica assim: {preencher(efetivo, vars)}</p>}
     </div>
   );
@@ -112,7 +109,7 @@ function Frases() {
                       aria-pressed={cor.toLowerCase() === c.cor.toLowerCase()} onClick={() => setCor(c.cor)} />
                   ))}
                   <input id="cor-destaque" type="color" className="entrada cor-livre" value={cor} onChange={(e) => setCor(e.target.value)} aria-label="Outra cor" />
-                  <small>Vale para a página inicial e as boas-vindas.</small>
+                  <small>A cor da palavra em destaque na frase da tela de login.</small>
                 </div>
               </div>
             )}
@@ -189,7 +186,7 @@ function BoasVindasEditor() {
       </section>
 
       <h2 className="subtitulo">Blocos da página</h2>
-      <p className="previa-linha">O bloco “Números” também aparece no rodapé da página inicial, para qualquer visitante: use só números reais.</p>
+      <p className="previa-linha">Esta página aparece em “Sobre o curso” e, na tela de login, em “Método” e “Professores”, para qualquer visitante: use só números reais.</p>
       {c.blocos.map((b, i) => (
         <section key={b.id || i} className="cartao form bloco-editor">
           <div className="linha-titulo-secao">

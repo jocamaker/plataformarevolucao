@@ -34,8 +34,29 @@
   backdrop-filter: blur(18px);
   border-bottom-color: var(--border);
 }
-.app-nav { display: flex; align-items: center; gap: 8px; justify-self: center; }
-.app-nav .metal { height: 38px; padding: 0 15px; font-size: 13.5px; }
+.app-nav { display: flex; align-items: center; gap: 2px; justify-self: center; }
+.app-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 9px;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.app-nav-item svg { width: 17px; height: 17px; flex: none; }
+.app-nav-item .app-nav-seta { width: 14px; height: 14px; margin-left: -2px; }
+.app-nav-item:hover { color: var(--text); background: var(--surface-2); }
+.app-nav-item[aria-current="page"], .app-nav-item[data-ativo="true"], .app-nav-item[aria-expanded="true"] {
+  color: var(--acento);
+  background: color-mix(in srgb, var(--acento) 11%, transparent);
+}
+/* no claro, cabeçalho branco fixo, como nas referências */
+[data-theme="light"] .app-topo { background: #ffffff; border-bottom-color: var(--border); }
 .app-acoes { display: flex; align-items: center; gap: 8px; justify-self: end; }
 .app .burger { border-color: var(--border); background: var(--surface); color: var(--text); }
 .menu-cheio--app { justify-content: flex-start; }
@@ -363,4 +384,28 @@
 @media (max-width: 560px) {
   .linha-numero { grid-template-columns: 84px minmax(0, 1fr) auto; }
   .barra-salvar { flex-wrap: wrap; }
+}
+.previa-login { background: #ffffff; color: #14122b; }
+.previa-login em.destaque { color: var(--destaque); }
+
+/* Dashboard: cartão de saudação (quem, data e três números) */
+.saudacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 28px; margin-bottom: 18px; padding: 20px 24px; }
+.saudacao-quem { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.saudacao-avatar { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 50%; background: var(--acento); color: #fff; font-size: 21px; font-weight: 600; }
+.saudacao h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; }
+.saudacao-quem p { margin-top: 2px; font-size: 13.5px; color: var(--muted); }
+.saudacao-quem p::first-letter { text-transform: uppercase; }
+.saudacao-numeros { display: flex; flex-wrap: wrap; gap: 10px 26px; list-style: none; }
+.saudacao-numeros li { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; align-items: center; column-gap: 10px; }
+.saudacao-icone { grid-row: 1 / 3; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: color-mix(in srgb, var(--cor-numero) 14%, transparent); color: var(--cor-numero); }
+.saudacao-icone svg { width: 19px; height: 19px; }
+.saudacao-numeros b { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--text); }
+.saudacao-numeros small { max-width: 13ch; font-size: 12px; line-height: 1.3; color: var(--muted); }
+.barra-dia { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 18px; margin-bottom: 18px; }
+@media (max-width: 640px) {
+  .saudacao { padding: 18px 16px; }
+  .saudacao h1 { font-size: 21px; }
+  .saudacao-numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; }
+  .saudacao-numeros li { grid-template-columns: 1fr; grid-template-rows: auto; align-content: start; row-gap: 6px; }
+  .saudacao-icone { grid-row: auto; width: 34px; height: 34px; }
 }

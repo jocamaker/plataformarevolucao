@@ -1,136 +1,121 @@
+/* Entrada: fundo de cores parado (sem vídeo nem animação) e um cartão
+   branco: à esquerda, o acesso; à direita, a marca do curso (frase, texto e
+   foto do professor, que o moderador edita em Textos). */
+
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock4, GraduationCap, Target } from "lucide-react";
 import { useApp } from "../state/AppContext.jsx";
 import { useArquivoUrl, useBoasVindas, useConfigTextos } from "../state/hooks.js";
-import { SENHA_DEMO } from "../data/semente.js";
-import { BOAS_VINDAS_PADRAO } from "../data/semente.js";
+import { BOAS_VINDAS_PADRAO, SENHA_DEMO } from "../data/semente.js";
 import { COR_DESTAQUE_PADRAO, textoDe } from "../textos.js";
-import { Cinema } from "../ui/Cinema.jsx";
-import { Botao, Dialogo, Estrela } from "../ui/ui.jsx";
+import { Dialogo, Frase, Marca } from "../ui/ui.jsx";
+import { AvatarProfessor, Bloco } from "./Paginas.jsx";
 
-const ICONES_DESTAQUE = [GraduationCap, Target, Clock4];
+const INFORMACOES = [
+  { k: "metodo", titulo: "Método" },
+  { k: "professores", titulo: "Professores" },
+  { k: "acesso", titulo: "Acesso" },
+];
 
-function Avatar({ hero }) {
-  const { url } = useArquivoUrl(hero.foto);
-  return <span className="avatar" style={{ "--cor": hero.cor }}>{url ? <img src={url} alt="" /> : (hero.nome || "?").charAt(0)}</span>;
-}
-
-function ConteudoFolha({ folha, welcome }) {
-  const hero = welcome.hero || {};
-  if (folha === "metodo") {
-    const destaque = welcome.blocos.find((b) => b.tipo === "destaque");
-    return (
-      <>
-        {destaque?.itens?.length > 0 && (
-          <div className="destaques">
-            {destaque.itens.map((d) => <div key={d.label}><strong>{d.valor}</strong><span>{d.label}</span></div>)}
-          </div>
-        )}
-        {welcome.blocos.map((b) => {
-          if (b.tipo === "titulo") return <h3 key={b.id}>{b.texto}</h3>;
-          if (b.tipo === "texto") return <p key={b.id} style={{ whiteSpace: "pre-line" }}>{b.texto}</p>;
-          return null;
-        })}
-      </>
-    );
-  }
-  if (folha === "professores") {
+function Informacao({ qual, conteudo }) {
+  const hero = conteudo.hero || {};
+  if (qual === "metodo") return <div className="blocos">{conteudo.blocos.map((b) => <Bloco key={b.id} bloco={b} />)}</div>;
+  if (qual === "professores") {
     return (
       <div className="professor">
-        <Avatar hero={hero} />
+        <AvatarProfessor hero={hero} />
         <div>
-          <span className="eyebrow">Seus professores</span>
           <strong>{hero.nome}</strong>
-          <p>{hero.subtitulo}</p>
+          {hero.subtitulo && <p>{hero.subtitulo}</p>}
         </div>
       </div>
     );
   }
-  return <p>O acesso é criado pelo seu professor. Entre com o e-mail cadastrado e a senha que você recebeu. Se esqueceu a senha, fale com a coordenação.</p>;
+  return <p className="texto-dialogo">O acesso é criado pelo seu professor. Entre com o e-mail cadastrado e a senha que você recebeu. Se esqueceu a senha, fale com a coordenação.</p>;
 }
 
-const TITULOS_FOLHA = { metodo: "Método", professores: "Professores", acesso: "Acesso" };
+function FotoProfessor({ hero }) {
+  const { url } = useArquivoUrl(hero.foto);
+  return (
+    <div className="login-foto" aria-hidden={!url}>
+      <span className="login-aneis" aria-hidden="true" />
+      {url && <img src={url} alt={hero.nome || "Professor"} />}
+    </div>
+  );
+}
 
 export default function Login() {
   const { s, modo } = useApp();
   const config = useConfigTextos();
-  const welcome = useBoasVindas() || BOAS_VINDAS_PADRAO;
-  const [passo, setPasso] = useState("email");
+  const conteudo = useBoasVindas() || BOAS_VINDAS_PADRAO;
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [folha, setFolha] = useState(null);
+  const [info, setInfo] = useState(null);
   const [instalar, setInstalar] = useState(false);
-  const campo = useRef(null);
+  const campoSenha = useRef(null);
   const t = (chave) => textoDe(config, chave);
 
   useEffect(() => { s.auth.precisaInstalar().then(setInstalar).catch(() => {}); }, [s]);
 
-  const focar = () => setTimeout(() => campo.current?.focus(), 30);
-  const irParaEmail = () => { setPasso("email"); setSenha(""); setErro(""); focar(); };
-
-  const enviar = async (e) => {
+  // se der certo, a rota /entrar leva para a primeira tela da plataforma
+  const entrar = async (e) => {
     e.preventDefault();
-    if (passo === "email") {
-      if (!/.+@.+\..+/.test(email.trim())) { setErro("Digite um e-mail válido para continuar."); return; }
-      setErro(""); setPasso("senha"); focar();
-      return;
-    }
-    // se der certo, a rota /entrar redireciona para as boas-vindas
+    if (!/.+@.+\..+/.test(email.trim())) { setErro("Digite um e-mail válido."); return; }
+    if (!senha) { setErro("Digite a sua senha."); campoSenha.current?.focus(); return; }
     setEnviando(true);
+    setErro("");
     try {
       await s.auth.entrar(email, senha);
     } catch (err) {
-      setErro(err.codigo === "credenciais" ? "E-mail ou senha não conferem. Confira os dados e tente de novo." : err.message);
+      setErro(err.codigo === "credenciais" ? "E-mail ou senha não conferem. Confira e tente de novo." : err.message);
       setEnviando(false);
     }
   };
 
-  const destaque = welcome.blocos.find((b) => b.tipo === "destaque")?.itens || [];
-
   return (
-    <>
-      <Cinema
-        nav={[
-          { label: "Método", onClick: () => setFolha("metodo") },
-          { label: "Professores", onClick: () => setFolha("professores") },
-          { label: "Acesso", onClick: () => setFolha("acesso") },
-        ]}
-        acoes={<Botao variante="solido" className="aparece aparece--escala" style={{ "--d": "0.34s" }} onClick={irParaEmail}>Entrar</Botao>}
-        selo={<span className="selo-topo aparece aparece--pop" style={{ "--d": "0.22s" }}><Estrela />{t("inicial.selo")}</span>}
-        titulo={t("inicial.titulo")}
-        corDestaque={config?.corDestaque || COR_DESTAQUE_PADRAO}
-        lede={t("inicial.lede")}
-        stats={destaque.map((d, i) => {
-          const Icone = ICONES_DESTAQUE[i % ICONES_DESTAQUE.length];
-          return { icone: <Icone aria-hidden="true" />, texto: <><b>{d.valor}</b> {d.label}</> };
-        })}
-      >
-        <form className="capsula" onSubmit={enviar} noValidate>
-          {passo === "email" ? (
-            <input ref={campo} key="email" id="login-email" type="email" autoComplete="email" inputMode="email"
-              placeholder="Digite seu e-mail" aria-label="E-mail" value={email}
-              onChange={(e) => { setEmail(e.target.value); setErro(""); }} />
-          ) : (
-            <input ref={campo} key="senha" id="login-senha" type="password" autoComplete="current-password"
-              placeholder="Sua senha" aria-label="Senha" value={senha}
-              onChange={(e) => { setSenha(e.target.value); setErro(""); }} />
-          )}
-          <Botao type="submit" variante="solido" disabled={enviando}>{passo === "email" ? "Continuar" : enviando ? "Entrando…" : "Entrar"}</Botao>
-        </form>
-        <p className="cine-dica" aria-live="polite">
-          {erro ? <span className="erro">{erro}</span>
-            : passo === "senha" ? <>{email} · <button type="button" onClick={irParaEmail}>trocar e-mail</button></>
-              : instalar ? <Link to="/instalar">Primeiro acesso: criar a conta do moderador</Link>
-                : modo === "local" ? `Demonstração: aluno@curso.com ou moderador@curso.com · senha ${SENHA_DEMO}` : "Entre com o e-mail cadastrado pelo seu professor."}
-        </p>
-      </Cinema>
+    <div className="login fundo-cores" data-theme="light" style={{ "--destaque": config?.corDestaque || COR_DESTAQUE_PADRAO }}>
+      <main className="login-cartao">
+        <section className="login-acesso" aria-labelledby="login-titulo">
+          <Marca className="login-logo" />
+          <h1 id="login-titulo" className="login-titulo">Entrar na plataforma</h1>
+          <p className="login-sub">{t("inicial.selo")}</p>
+          <form className="login-form" onSubmit={entrar} noValidate>
+            <label className="campo" htmlFor="login-email">
+              <span>E-mail</span>
+              <input id="login-email" className="entrada" type="email" autoComplete="email" inputMode="email" placeholder="seu@email.com"
+                value={email} onChange={(e) => { setEmail(e.target.value); setErro(""); }} />
+            </label>
+            <label className="campo" htmlFor="login-senha">
+              <span>Senha</span>
+              <input id="login-senha" ref={campoSenha} className="entrada" type="password" autoComplete="current-password" placeholder="Sua senha"
+                value={senha} onChange={(e) => { setSenha(e.target.value); setErro(""); }} />
+            </label>
+            {erro && <p className="login-erro" role="alert">{erro}</p>}
+            <button type="submit" className="login-botao" disabled={enviando}>{enviando ? "Entrando…" : "Entrar"}</button>
+          </form>
+          <p className="login-dica">
+            {instalar ? <Link to="/instalar">Primeiro acesso: criar a conta do moderador</Link>
+              : modo === "local" ? <>Demonstração: aluno@curso.com ou moderador@curso.com · senha {SENHA_DEMO}</>
+                : "O acesso é criado pelo seu professor."}
+          </p>
+        </section>
 
-      <Dialogo className="folha" data-theme="dark" aberto={!!folha} aoFechar={() => setFolha(null)} titulo={TITULOS_FOLHA[folha]}>
-        <ConteudoFolha folha={folha} welcome={welcome} />
+        <aside className="login-marca">
+          <h2><Frase texto={t("inicial.titulo")} /></h2>
+          <p>{t("inicial.lede")}</p>
+          <FotoProfessor hero={conteudo.hero || {}} />
+        </aside>
+      </main>
+
+      <nav className="login-links" aria-label="Sobre o curso">
+        {INFORMACOES.map((i) => <button key={i.k} type="button" onClick={() => setInfo(i.k)}>{i.titulo}</button>)}
+      </nav>
+
+      <Dialogo aberto={!!info} aoFechar={() => setInfo(null)} titulo={INFORMACOES.find((i) => i.k === info)?.titulo} largura={560}>
+        {info && <Informacao qual={info} conteudo={conteudo} />}
       </Dialogo>
-    </>
+    </div>
   );
 }

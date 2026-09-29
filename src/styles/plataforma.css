@@ -394,41 +394,117 @@ button.barras-linha:hover { background: var(--surface-2); }
   .envio-corpo { padding-left: 16px; }
 }
 
-/* ---------- Tipografia de títulos ----------
-   Três vozes, cada uma com um papel:
-   - Marcellus: tudo o que é caixa alta (rótulos acima dos títulos, categorias).
-   - Instrument Serif itálica: os títulos em caixa baixa (páginas, herói,
-     janelas, cartões). A palavra em destaque (<em>) segue na mesma letra e se
-     separa pela cor.
-   - Inter: texto corrido, formulários, botões e números.
-   A itálica tem olho menor que o Inter; font-size-adjust iguala a altura das
-   minúsculas, então os tamanhos definidos em cada tela continuam valendo.
-   Ela só existe no peso 400: sem isso o navegador inventaria um negrito. */
+/* ---------- Materiais em áreas ---------- */
 
-h1, h2, h3, h4,
-.subtitulo, .bloco-titulo,
-.replan-resumo strong, .professor strong, .destaques strong,
-.cartao-curso-corpo strong, .meta-materia, .bloco-materia-nome {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-  font-synthesis: none;
-  font-size-adjust: 0.5;
-  letter-spacing: 0.005em;
+.grade-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+.tile-area {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 260px;
+  padding: 26px 16px 24px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--cor) 62%, #ffffff) 0%, var(--cor) 62%);
+  color: #ffffff;
+  text-align: center;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--cor) 28%, transparent);
+  transition: transform 0.25s var(--ease-out), box-shadow 0.25s ease;
 }
-.titulo-pagina h1, .cine h1, .cabeca-playlist h1, .cabeca-redacao h1,
-.cabeca-editor-texto h1, .previa-app h2 { letter-spacing: -0.01em; line-height: 1.08; }
-.titulo-pagina h1 em, .cine h1 em { font-size: 1em; }
+/* anéis concêntricos, sumindo nas bordas */
+.tile-area::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: repeating-radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.2) 0 1.5px, transparent 1.5px 30px);
+  -webkit-mask-image: radial-gradient(circle at 50% 36%, #000 18%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 36%, #000 18%, transparent 72%);
+}
+.tile-area:hover { transform: translateY(-4px); box-shadow: 0 18px 36px color-mix(in srgb, var(--cor) 38%, transparent); }
+.tile-area-icone { display: grid; place-items: center; margin: 22px 0 auto; }
+.tile-area-icone svg { width: 66px; height: 66px; }
+.tile-area-rotulo { margin-top: 26px; font-size: 14px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.9; }
+.tile-area-nome { font-size: 32px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
+.tile-area-detalhe { margin-top: 8px; font-size: 12.5px; opacity: 0.85; }
+.tile-area--nova { --cor: #94a3b8; justify-content: center; gap: 10px; background: transparent; border: 2px dashed var(--border-strong); color: var(--muted); box-shadow: none; }
+.tile-area--nova::before { display: none; }
+.tile-area--nova svg { width: 34px; height: 34px; }
+.tile-area--nova strong { font-size: 16px; font-weight: 600; }
+.tile-area--nova:hover { color: var(--text); border-color: var(--acento); box-shadow: none; }
 
-/* caixa alta: Marcellus, aberta e em dourado */
-.eyebrow, .capa-categoria, .miniatura-lado small {
-  font-family: var(--font-caps);
-  font-weight: 400;
-  font-synthesis: none;
-  letter-spacing: 0.18em;
+.cabeca-area { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; margin-bottom: 20px; }
+.cabeca-area h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+.cabeca-area .titulo-direita { margin-left: auto; }
+.cabeca-area-icone { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 14px; background: var(--cor); color: #ffffff; box-shadow: 0 8px 20px color-mix(in srgb, var(--cor) 30%, transparent); }
+.cabeca-area-icone svg { width: 28px; height: 28px; }
+
+.grade-listas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+.cartao-lista { display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-solid); }
+.cartao-lista-faixa { display: flex; align-items: center; height: 62px; padding: 0 18px; background: color-mix(in srgb, var(--cor) 20%, var(--surface-solid)); color: var(--cor); }
+.cartao-lista-faixa svg { width: 26px; height: 26px; }
+.cartao-lista-corpo { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 16px 18px 18px; }
+.cartao-lista-materia { font-size: 12.5px; font-weight: 600; color: var(--cor); }
+.cartao-lista h3 { font-size: 17px; font-weight: 600; line-height: 1.3; letter-spacing: -0.015em; }
+.cartao-lista-desc { font-size: 13.5px; color: var(--muted); }
+.cartao-lista-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: auto; padding-top: 16px; font-size: 12.5px; }
+.cartao-lista-questoes { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--text); }
+.cartao-lista-questoes svg { width: 15px; height: 15px; }
+.cartao-lista-acoes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 12px; }
+.cartao-lista-acoes > .cartao-lista-acao { flex: 1 1 100%; }
+.cartao-lista-acao { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 14px; border-radius: 9px; background: var(--cor); color: #ffffff; font-size: 14px; font-weight: 600; transition: filter 0.2s ease; }
+.cartao-lista-acao:hover { filter: brightness(1.07); }
+.cartao-lista-acao svg { width: 16px; height: 16px; }
+.cartao-lista-acao--off { background: var(--surface-2); color: var(--muted); font-weight: 500; }
+
+.form-area { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; align-items: start; }
+.form-area-previa .tile-area { min-height: 250px; }
+.icones-area { display: flex; flex-wrap: wrap; gap: 6px; }
+.icones-area .icone-btn[aria-checked="true"] { border-color: var(--acento); color: var(--acento); background: color-mix(in srgb, var(--acento) 10%, transparent); }
+@media (max-width: 640px) {
+  .grade-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .tile-area { min-height: 200px; padding: 18px 10px; }
+  .tile-area-icone svg { width: 48px; height: 48px; }
+  .tile-area-rotulo { margin-top: 16px; font-size: 11.5px; }
+  .tile-area-nome { font-size: 22px; }
+  .form-area { grid-template-columns: 1fr; }
+  .form-area-previa { display: none; }
 }
-.eyebrow { color: var(--ouro); }
-.secao > .eyebrow.perigo { color: var(--danger); }
-/* nome da matéria no cartão do edital: a itálica pede um corpo maior */
-.bloco-materia-nome { font-size: 20px; }
-@media (max-width: 560px) { .bloco-materia-nome { font-size: 18px; } }
+
+/* ---------- Provas para simulado ---------- */
+
+.grade-provas { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 18px; margin-bottom: 26px; }
+.cartao-prova { display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; border: 1.5px solid color-mix(in srgb, var(--acento) 35%, var(--border)); background: var(--surface-solid); transition: transform 0.25s var(--ease-out), box-shadow 0.25s ease; }
+.cartao-prova:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(40, 40, 90, 0.12); }
+.cartao-prova > a { display: block; }
+.capa-prova { position: relative; aspect-ratio: 16 / 9.4; overflow: hidden; background: #eef1fb; border-bottom: 1px solid var(--border); }
+.capa-prova img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.capa-prova--gerada { display: grid; place-content: center; justify-items: center; gap: 10px; background: linear-gradient(150deg, color-mix(in srgb, var(--cor) 16%, #ffffff), color-mix(in srgb, var(--cor) 36%, #ffffff)); color: color-mix(in srgb, var(--cor) 80%, #000000); }
+.capa-prova--gerada svg { width: 34px; height: 34px; }
+.capa-prova--gerada span { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+.capa-prova--gerando { display: grid; place-items: center; color: var(--muted); font-size: 13.5px; }
+.cartao-prova-corpo { display: flex; flex: 1; flex-direction: column; gap: 12px; padding: 14px 16px 16px; }
+.cartao-prova-titulo { font-size: 15.5px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; }
+.cartao-prova-rodape { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 12px; margin-top: auto; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.cartao-prova-rodape > span { white-space: nowrap; }
+.cartao-prova-rodape b { color: var(--text-soft); font-weight: 600; }
+.cartao-prova .nota-cartao b { color: var(--acento); }
+.cartao-prova-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cartao-prova-acoes > .btn--solido { flex: 1 1 100%; justify-content: center; }
+.cartao-prova--previa { pointer-events: none; }
+.form-prova { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 20px; align-items: start; }
+.form-prova-capa { display: grid; gap: 10px; }
+@media (max-width: 640px) {
+  .grade-provas { grid-template-columns: 1fr; }
+  .form-prova { grid-template-columns: 1fr; }
+}
+
+/* ---------- Tela com erro (rede de segurança) ---------- */
+
+.falha-tela { display: grid; justify-items: start; gap: 10px; max-width: 560px; padding: 24px; }
+.falha-tela > svg { width: 26px; height: 26px; color: var(--danger); }
+.falha-tela h2 { font-size: 18px; font-weight: 600; }
+.falha-tela p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.falha-tela code { max-width: 100%; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text-soft); font-size: 12.5px; overflow-wrap: anywhere; }

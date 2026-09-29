@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <!-- Fundo da entrada: campo frio e luminoso (azul, anil e um toque de
+       água) com ondas lisas em diagonal. O CSS desfoca esta camada; os fios
+       nítidos ficam em fundo-fios.svg, com a mesma geometria. -->
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A88F8"/>
+      <stop offset="0.45" stop-color="#5D6BEE"/>
+      <stop offset="1" stop-color="#4C53DA"/>
+    </linearGradient>
+    <radialGradient id="luz" cx="0.2" cy="0.08" r="0.65">
+      <stop offset="0" stop-color="#F1F4FF" stop-opacity="0.6"/>
+      <stop offset="0.6" stop-color="#F1F4FF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#F1F4FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="agua" cx="0.06" cy="1" r="0.6">
+      <stop offset="0" stop-color="#63D6E8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#63D6E8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brilho" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="0.4" stop-color="#FFFFFF" stop-opacity="0.42"/>
+      <stop offset="0.8" stop-color="#FFFFFF" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.03"/>
+    </linearGradient>
+    <linearGradient id="sombra" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3A3FC2" stop-opacity="0.05"/>
+      <stop offset="0.6" stop-color="#3A3FC2" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#3A3FC2" stop-opacity="0.18"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#base)"/>
+  <rect width="1600" height="1000" fill="url(#agua)"/>
+
+  <!-- vale escuro, atrás da faixa de luz: dá profundidade -->
+  <path fill="url(#sombra)" d="M-100 700 C 240 600 560 780 900 660 S 1420 440 1700 470 L 1700 640 C 1430 620 1190 830 900 860 S 250 800 -100 900 Z"/>
+  <!-- faixa de luz principal, como uma dobra de seda -->
+  <path fill="url(#brilho)" d="M-100 600 C 240 490 560 680 900 550 S 1420 320 1700 360 L 1700 450 C 1430 420 1190 630 900 650 S 250 640 -100 740 Z"/>
+  <!-- borda da dobra, um pouco mais nítida -->
+  <path fill="#FFFFFF" fill-opacity="0.14" d="M-100 590 C 240 480 560 670 900 540 S 1420 310 1700 350 L 1700 380 C 1430 350 1190 560 900 590 S 250 590 -100 650 Z"/>
+  <!-- segunda onda, baixa e mais discreta: dá ritmo ao pé da tela -->
+  <path fill="url(#brilho)" fill-opacity="0.55" d="M-100 900 C 300 820 640 930 1000 850 S 1480 720 1700 750 L 1700 820 C 1480 800 1260 930 1000 950 S 300 930 -100 1000 Z"/>
+  <!-- véu de luz no alto, por cima de tudo -->
+  <rect width="1600" height="1000" fill="url(#luz)"/>
+
+</svg>

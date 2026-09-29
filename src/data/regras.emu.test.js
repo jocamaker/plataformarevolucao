@@ -217,6 +217,27 @@ describe("plano e progresso", () => {
   });
 });
 
+describe("áreas de materiais e provas", () => {
+  it("aluno lê áreas e provas publicadas; só o moderador escreve", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const d = ctx.firestore();
+      await Promise.all([
+        setDoc(doc(d, "provas/pub"), { titulo: "ENEM 2018 · Dia 2", publicado: true }),
+        setDoc(doc(d, "provas/rascunho"), { titulo: "Rascunho", publicado: false }),
+        setDoc(doc(d, "areasMateriais/fis"), { nome: "Física", rotulo: "Listas de" }),
+      ]);
+    });
+    await assertSucceeds(getDoc(doc(db("ana"), "provas/pub")));
+    await assertFails(getDoc(doc(db("ana"), "provas/rascunho")));
+    await assertSucceeds(getDocs(query(collection(db("ana"), "provas"), where("publicado", "==", true))));
+    await assertSucceeds(getDoc(doc(db("ana"), "areasMateriais/fis")));
+    await assertFails(setDoc(doc(db("ana"), "areasMateriais/nova"), { nome: "Minha" }));
+    await assertFails(setDoc(doc(db("ana"), "provas/minha"), { titulo: "Minha", publicado: true }));
+    await assertSucceeds(setDoc(doc(db("mod"), "provas/nova"), { titulo: "Nova", publicado: false }));
+    await assertFails(getDoc(doc(db("bloq"), "areasMateriais/fis")));
+  });
+});
+
 describe("subtópicos vistos", () => {
   it("o aluno marca os próprios (se pode concluir); não mexe nos de outro", async () => {
     await assertSucceeds(setDoc(doc(db("ana"), "vistos/ana"), { alunoId: "ana", subtopicos: { s1: true } }));
@@ -250,6 +271,12 @@ describe("arquivos (Storage)", () => {
     await assertSucceeds(uploadBytes(ref(st("mod"), "redacoes/ana/foto.jpg"), pdf, { contentType: "image/jpeg" }));
     await assertFails(uploadBytes(ref(st("mod"), "redacoes/ana/nota.txt"), pdf, { contentType: "text/plain" }));
     await assertFails(uploadBytes(ref(st("ana"), "redacoes/ana/anexo-2.pdf"), pdf, { contentType: "application/pdf" }));
+  });
+  it("provas: PDF e capa só o moderador envia; qualquer logado lê", async () => {
+    await assertFails(uploadBytes(ref(st("ana"), "provas/p1/prova.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(st("mod"), "provas/p1/prova.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(st("mod"), "provas/p1/capa.jpg"), pdf, { contentType: "image/jpeg" }));
+    await assertFails(uploadBytes(ref(st("mod"), "provas/p1/nota.txt"), pdf, { contentType: "text/plain" }));
   });
   it("materiais: só o moderador envia", async () => {
     await assertFails(uploadBytes(ref(st("ana"), "materiais/m1/a.pdf"), pdf, { contentType: "application/pdf" }));

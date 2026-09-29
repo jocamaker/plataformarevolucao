@@ -9,7 +9,7 @@ import {
 } from "firebase/auth";
 import {
   Timestamp, collection, connectFirestoreEmulator, deleteDoc, deleteField, doc, getDoc, getDocs, increment,
-  initializeFirestore, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  initializeFirestore, onSnapshot, persistentLocalCache, persistentMultipleTabManager, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from "firebase/firestore";
 import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref as refStorage, uploadBytesResumable } from "firebase/storage";
 import { ErroDados, ehOperacao } from "./contrato.js";
@@ -63,7 +63,13 @@ export function criarRepositorioFirebase(config) {
   const { emuladores, ...cfg } = config;
   const app = initializeApp(cfg);
   const auth = getAuth(app);
-  const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+  // cache persistente (IndexedDB): o que foi gravado sem conexão fica no
+  // aparelho e é enviado quando a plataforma reabre, mesmo depois de fechar a
+  // aba. Sem IndexedDB (Node, nos testes), fica o cache em memória.
+  const db = initializeFirestore(app, {
+    ignoreUndefinedProperties: true,
+    ...(typeof indexedDB !== "undefined" ? { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) } : {}),
+  });
   const storage = getStorage(app);
   if (emuladores) {
     const host = typeof emuladores === "string" ? emuladores : "127.0.0.1";
@@ -79,16 +85,39 @@ export function criarRepositorioFirebase(config) {
     try { return await fn(); } catch (e) { throw erroDados(e); }
   }
 
+  /* Logo depois de criar a conta, o perfil aparece aqui pela cópia local
+     antes de chegar ao servidor, e as regras recusam os primeiros ouvintes.
+     Um ouvinte recusado por permissão tenta de novo algumas vezes antes de
+     desistir (senão a tela fica vazia até recarregar a página). */
+  function ouvir(assinar, aoErro, rotulo) {
+    let parar = () => {};
+    let vivo = true;
+    let tentativas = 0;
+    const iniciar = () => {
+      parar = assinar((e) => {
+        if (!vivo) return;
+        if (e?.code === "permission-denied" && tentativas < 4) {
+          tentativas += 1;
+          setTimeout(() => { if (vivo) iniciar(); }, 600 * tentativas);
+          return;
+        }
+        if (aoErro) aoErro(erroDados(e)); else console.error(...rotulo, e); // eslint-disable-line no-console
+      });
+    };
+    iniciar();
+    return () => { vivo = false; parar(); };
+  }
+
   return {
     modo: "firebase",
 
     listar: (colecao, filtros) => executar(async () => (await getDocs(consulta(colecao, filtros))).docs.map(lerDoc)),
     obter: (colecao, id) => executar(async () => lerDoc(await getDoc(doc(db, colecao, id)))),
     observar(colecao, filtros, cb, aoErro) {
-      return onSnapshot(consulta(colecao, filtros), (snap) => cb(snap.docs.map(lerDoc)), (e) => (aoErro ? aoErro(erroDados(e)) : console.error(colecao, e)));
+      return ouvir((falha) => onSnapshot(consulta(colecao, filtros), (snap) => cb(snap.docs.map(lerDoc)), falha), aoErro, [colecao]);
     },
     observarDoc(colecao, id, cb, aoErro) {
-      return onSnapshot(doc(db, colecao, id), (snap) => cb(lerDoc(snap)), (e) => (aoErro ? aoErro(erroDados(e)) : console.error(colecao, id, e)));
+      return ouvir((falha) => onSnapshot(doc(db, colecao, id), (snap) => cb(lerDoc(snap)), falha), aoErro, [colecao, id]);
     },
     criar: (colecao, dados, id) => executar(async () => {
       const r = refDoc(colecao, id);

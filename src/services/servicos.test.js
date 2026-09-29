@@ -468,3 +468,50 @@ describe("jornadas práticas e edital por aluno", () => {
     await expect(t.s.planos.marcarSubtopico(carlos, "g2-tecnicas-e-cultivo", true)).rejects.toThrow(ErroPermissao);
   });
 });
+
+describe("áreas de materiais e provas para simulado", () => {
+  const imagem = () => new File([new Uint8Array([255, 216, 255, 224, 0, 16])], "capa.jpg", { type: "image/jpeg" });
+
+  it("cria as áreas das matérias de uma vez; material entra na área; apagar a área não apaga o material", async () => {
+    await t.entrar("moderador@curso.com");
+    const antigo = await t.s.materiais.salvar({ titulo: "Resumo de Citologia", materiaId: "biologia" }, { arquivo: pdf("citologia.pdf") });
+    const semMateria = await t.s.materiais.salvar({ titulo: "Cronograma geral" }, { arquivo: pdf("geral.pdf") });
+    expect(await t.s.materiais.criarAreasDasMaterias()).toBe(9);
+    expect(await t.s.materiais.criarAreasDasMaterias()).toBe(0); // não duplica
+    const areas = await t.repo.listar("areasMateriais");
+    const fisica = areas.find((a) => a.materiaId === "fisica");
+    expect(fisica).toMatchObject({ nome: "Física", rotulo: "Listas de", icone: "atomo", cor: "#EF4444" });
+    // o material que já existia foi para a área da matéria dele; o sem matéria fica em "Outros"
+    expect((await t.repo.obter("materiais", antigo)).areaId).toBe(areas.find((a) => a.materiaId === "biologia").id);
+    expect((await t.repo.obter("materiais", semMateria)).areaId).toBeNull();
+    const id = await t.s.materiais.salvar({ titulo: "Eletrostática", materiaId: "fisica", areaId: fisica.id, questoes: 72, tipo: "lista" }, { arquivo: pdf("eletro.pdf") });
+    expect(await t.repo.obter("materiais", id)).toMatchObject({ areaId: fisica.id, questoes: 72 });
+    await expect(t.s.materiais.salvar({ titulo: "X", areaId: "nao-existe" }, { arquivo: pdf() })).rejects.toThrow(ErroValidacao);
+    await expect(t.s.materiais.salvar({ titulo: "X", questoes: 0 }, { arquivo: pdf() })).rejects.toThrow(ErroValidacao);
+    await t.s.materiais.removerArea(fisica.id);
+    expect(await t.repo.obter("materiais", id)).toMatchObject({ titulo: "Eletrostática", areaId: null });
+    await t.entrar("aluno@curso.com");
+    await expect(t.s.materiais.salvarArea({ nome: "Minha" })).rejects.toThrow(ErroPermissao);
+  });
+
+  it("prova com PDF e capa; o aluno vê só publicadas; o simulado registrado guarda a prova", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("moderador@curso.com");
+    await expect(t.s.provas.salvar({ titulo: "ENEM 2018 · Dia 2 · Prova verde" })).rejects.toThrow(ErroValidacao); // sem PDF
+    await expect(t.s.provas.salvar({ titulo: "X" }, { arquivo: pdf(), capa: new File(["x"], "c.txt", { type: "text/plain" }) })).rejects.toThrow(ErroValidacao);
+    const id = await t.s.provas.salvar({ titulo: "ENEM 2018 · Dia 2 · Prova verde", vestibularId: "enem", ano: 2018 }, { arquivo: pdf("enem-2018-d2.pdf"), capa: imagem() });
+    await t.s.provas.salvar({ titulo: "Rascunho", publicado: false }, { arquivo: pdf() });
+    const prova = await t.repo.obter("provas", id);
+    expect(prova).toMatchObject({ vestibularId: "enem", ano: 2018, publicado: true, arquivo: { nome: "enem-2018-d2.pdf" } });
+    expect(prova.capa.ref).toBeTruthy();
+    await t.entrar("aluno@curso.com");
+    let vistas;
+    t.s.provas.observar((l) => { vistas = l; });
+    await esperar();
+    expect(vistas.map((p) => p.titulo)).toEqual(["ENEM 2018 · Dia 2 · Prova verde"]);
+    await expect(t.s.provas.remover(id)).rejects.toThrow(ErroPermissao);
+    const sim = await t.s.simulados.registrar(ana, { vestibularId: "enem", nome: prova.titulo, ano: 2018, data: "2026-09-27", total: 90, acertos: 54, erros: 36, provaId: id });
+    expect((await t.repo.obter("simulados", sim)).provaId).toBe(id);
+  });
+});
+

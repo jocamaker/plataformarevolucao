@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, GraduationCap, LogOut, Moon, RotateCcw, Sparkles, Sun } from "lucide-react";
+import { Bell, ChevronDown, GraduationCap, LogOut, Moon, RotateCcw, Sun } from "lucide-react";
 import { useApp } from "../state/AppContext.jsx";
 import { useNotificacoes } from "../state/hooks.js";
 import { useTema } from "../state/tema.js";
 import { baseDoPapel, todosDoMenu } from "../navegacao.js";
-import { MenuCheio } from "../ui/Cinema.jsx";
-import { Botao, Grao, Marca } from "../ui/ui.jsx";
+import { MenuCheio } from "../ui/MenuCheio.jsx";
+import { Botao, Carregando, Marca } from "../ui/ui.jsx";
+import { LimiteDeErro } from "../ui/Falha.jsx";
 
 // sino com os avisos não lidos (só aluno)
 function Sino({ alunoId, rota }) {
@@ -19,8 +20,9 @@ function Sino({ alunoId, rota }) {
   );
 }
 
-/* Moldura das telas internas: cabeçalho com as pílulas principais e um menu
-   suspenso (Extra/Mais), tema, conta; no celular, menu em tela cheia. */
+/* Moldura das telas internas: cabeçalho com os itens principais (ícone e
+   nome) e um menu suspenso (Extra/Mais), tema, conta; no celular, menu em
+   tela cheia. */
 export default function Shell({ menu }) {
   const { usuario, sair, recomecarDemonstracao, modo } = useApp();
   const [tema, alternarTema] = useTema();
@@ -67,12 +69,12 @@ export default function Shell({ menu }) {
 
         <nav className="app-nav" aria-label="Principal">
           {principais.map((item) => (
-            <NavLink key={item.k} to={rota(item)} className="metal">{item.label}</NavLink>
+            <NavLink key={item.k} to={rota(item)} className="app-nav-item"><item.icone aria-hidden="true" />{item.label}</NavLink>
           ))}
           {extras.length > 0 && (
             <div style={{ position: "relative" }}>
-              <button type="button" className="metal" aria-expanded={aberto === "mais"} data-ativo={extraAtivo} onClick={() => alternar("mais")}>
-                {menu.extra.label}<ChevronDown aria-hidden="true" />
+              <button type="button" className="app-nav-item" aria-expanded={aberto === "mais"} data-ativo={extraAtivo} onClick={() => alternar("mais")}>
+                {menu.extra.label}<ChevronDown aria-hidden="true" className="app-nav-seta" />
               </button>
               {aberto === "mais" && (
                 <div className="painel" style={{ right: "auto", left: 0 }}>
@@ -103,7 +105,6 @@ export default function Shell({ menu }) {
                   <span>{usuario.role === "moderador" ? "Moderador" : "Aluno"}</span>
                 </div>
                 <hr />
-                <button type="button" onClick={() => navigate("/boas-vindas")}><Sparkles />Rever a tela de boas-vindas</button>
                 {usuario.role === "aluno" && <button type="button" onClick={() => navigate(`${base}/boas-vindas`)}><GraduationCap />Sobre o curso</button>}
                 {modo === "local" && <>
                   <hr />
@@ -137,10 +138,13 @@ export default function Shell({ menu }) {
       </MenuCheio>
 
       <main className="app-main" key={pathname}>
-        <Outlet />
+        {/* um erro numa tela fica nela; a troca de aba remonta tudo aqui */}
+        <LimiteDeErro>
+          <Suspense fallback={<Carregando />}>
+            <Outlet />
+          </Suspense>
+        </LimiteDeErro>
       </main>
-      {/* grão só nas telas internas: sobre o vídeo, a mistura custa um quadro a cada quadro */}
-      <Grao />
     </div>
   );
 }

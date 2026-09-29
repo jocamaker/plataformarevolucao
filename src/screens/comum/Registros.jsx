@@ -20,11 +20,12 @@ export function podeCorrigir(usuario, registro) {
 
 /* ---------- Questões ---------- */
 
-export function FormQuestoes({ alunoId, registro, aoConcluir, aoCancelar, pedirMotivo }) {
+// inicial: valores já preenchidos (ex.: a matéria e o tópico da lista que o aluno fez)
+export function FormQuestoes({ alunoId, registro, inicial = {}, aoConcluir, aoCancelar, pedirMotivo }) {
   const { s, hoje } = useApp();
   const [f, setF] = useState(() => registro
     ? { ...registro, subtopicoId: registro.subtopicoId || "", vestibularId: registro.vestibularId || "" }
-    : { data: hoje, materiaId: "", topicoId: "", subtopicoId: "", vestibularId: "", total: "", acertos: "", erros: "", obs: "" });
+    : { data: hoje, materiaId: "", topicoId: "", subtopicoId: "", vestibularId: "", total: "", acertos: "", erros: "", obs: "", ...inicial });
   const [motivo, setMotivo] = useState("");
   const { executar, ocupado, erro } = useAcao();
   const erros = errosDeCampo(erro);
@@ -116,11 +117,12 @@ export function DetalheQuestoes({ registro, foco, aoFechar, aoEditar, aoApagar }
 
 /* ---------- Simulados ---------- */
 
-export function FormSimulado({ alunoId, registro, aoConcluir, aoCancelar, pedirMotivo, cursoPadrao }) {
+// inicial: valores já preenchidos (ex.: a prova escolhida na galeria, com o provaId)
+export function FormSimulado({ alunoId, registro, inicial = {}, aoConcluir, aoCancelar, pedirMotivo, cursoPadrao }) {
   const { s, hoje } = useApp();
   const [f, setF] = useState(() => registro
     ? { ...registro, ano: registro.ano ?? "", cursoId: registro.cursoId || "" }
-    : { vestibularId: "", nome: "", ano: "", cursoId: cursoPadrao || "", data: hoje, total: "", acertos: "", erros: "", obs: "" });
+    : { vestibularId: "", nome: "", ano: "", cursoId: cursoPadrao || "", data: hoje, total: "", acertos: "", erros: "", obs: "", ...inicial });
   const [arquivo, setArquivo] = useState(null);
   const [tirarPdf, setTirarPdf] = useState(false);
   const [progresso, setProgresso] = useState(null);

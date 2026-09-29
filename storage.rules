@@ -23,6 +23,12 @@ service firebase.storage {
       allow write: if moderador() && (apagando() || pdf());
     }
 
+    // provas para simulado (PDF e capa): todos os logados leem; só o moderador envia
+    match /provas/{id}/{arquivo} {
+      allow read: if ativo();
+      allow write: if moderador() && (apagando() || pdf() || imagem(5));
+    }
+
     // PDF do simulado: o próprio aluno e o moderador
     match /simulados/{alunoId}/{arquivo} {
       allow read: if moderador() || eu(alunoId);
@@ -45,6 +51,15 @@ service firebase.storage {
     match /publico/{arquivo} {
       allow read: if true;
       allow write: if moderador() && (apagando() || imagem(10));
+    }
+
+    /* Flashcards (módulo src/modules/flashcards): imagens dos cartões, só o dono.
+       Bloco isolado; as imagens já chegam comprimidas (até 3 MB). */
+    match /flashcards/{uid}/{arquivo} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid
+        && (request.resource == null
+          || (request.resource.contentType.matches('image/(webp|jpeg|png)') && request.resource.size <= 3 * 1024 * 1024));
     }
   }
 }

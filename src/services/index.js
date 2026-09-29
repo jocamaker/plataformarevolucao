@@ -2,7 +2,7 @@
 
    const s = criarServicos(repositorio);
    s.auth, s.alunos, s.estrutura, s.planos, s.estudo, s.questoes, s.simulados,
-   s.materiais, s.notificacoes, s.playlists, s.redacao, s.textos, s.logs
+   s.materiais, s.provas, s.notificacoes, s.playlists, s.redacao, s.textos, s.logs
 
    Os nomes pedidos na especificação são apelidos: authService,
    studentService, studyPlanService, questionService, mockExamService,
@@ -17,6 +17,7 @@ import { servicoPlanos } from "./planos.js";
 import { servicoEstudo } from "./estudo.js";
 import { servicoQuestoes, servicoSimulados } from "./registros.js";
 import { servicoMateriais } from "./materiais.js";
+import { servicoProvas } from "./provas.js";
 import { servicoNotificacoes } from "./notificacoes.js";
 import { servicoLogs, servicoPlaylists, servicoRedacao, servicoTextos } from "./conteudo.js";
 
@@ -31,6 +32,7 @@ export function criarServicos(repo, opcoes = {}) {
   s.questoes = servicoQuestoes(ctx);
   s.simulados = servicoSimulados(ctx);
   s.materiais = servicoMateriais(ctx);
+  s.provas = servicoProvas(ctx);
   s.notificacoes = servicoNotificacoes(ctx);
   s.playlists = servicoPlaylists(ctx);
   s.redacao = servicoRedacao(ctx);

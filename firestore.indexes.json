@@ -1,1 +1,37 @@
-{ "indexes": [], "fieldOverrides": [] }
+{
+  "indexes": [
+    {
+      "collectionGroup": "flashcards_cartoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "materiaId", "order": "ASCENDING" },
+        { "fieldPath": "ordemNovo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "flashcards_cartoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "topicoId", "order": "ASCENDING" },
+        { "fieldPath": "ordemNovo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "flashcards_cartoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "ordemNovo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "flashcards_revisoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cartaoId", "order": "ASCENDING" },
+        { "fieldPath": "feitaEm", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

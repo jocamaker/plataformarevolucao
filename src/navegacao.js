@@ -1,5 +1,5 @@
 import {
-  FileQuestion, FileText, House, Library, ListChecks, Map as Mapa, Megaphone, Network, PenLine, PlayCircle, TrendingUp, Type, Users,
+  FileQuestion, FileText, House, Layers, Library, ListChecks, Map as Mapa, Megaphone, Network, PenLine, PlayCircle, TrendingUp, Type, Users,
 } from "lucide-react";
 
 /* Menus por papel: `topo` vira pílulas no cabeçalho; `extra` é o menu
@@ -9,6 +9,7 @@ export const MENU_ALUNO = {
   topo: [
     { k: "inicio", label: "Dashboard", icone: House },
     { k: "edital", label: "Edital", icone: ListChecks },
+    { k: "flashcards", label: "Flashcards", icone: Layers },
     { k: "cursos", label: "Meus cursos", icone: PlayCircle },
     { k: "redacao", label: "Redação", icone: PenLine },
     { k: "desempenho", label: "Desempenho", icone: TrendingUp },
@@ -28,6 +29,7 @@ export const MENU_MODERADOR = {
     { k: "alunos", label: "Alunos", icone: Users },
     { k: "jornadas", label: "Jornadas", icone: Mapa },
     { k: "materiais", label: "Materiais", icone: Library },
+    { k: "simulados", label: "Simulados", icone: FileText },
     { k: "cursos", label: "Aulas em vídeo", icone: PlayCircle },
   ],
   extra: {

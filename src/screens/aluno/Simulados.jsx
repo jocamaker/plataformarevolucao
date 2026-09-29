@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
-import { FileText, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardCheck, ExternalLink, FileText, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../../state/AppContext.jsx";
-import { useAluno, useArquivoUrl, useEu, useFrases, useHoje, useSimulados } from "../../state/hooks.js";
+import { useAluno, useArquivoUrl, useEu, useFrases, useHoje, usePlano, useProvas, useSimulados } from "../../state/hooks.js";
 import { desempenhoSimulados, filtrarRegistros, fmtPct, pct } from "../../core/desempenho.js";
 import { fmtDataLonga } from "../../core/datas.js";
 import { BarraFiltros, filtroEfetivo, useFiltros } from "../../ui/Filtros.jsx";
 import { LinhaPercentual } from "../../ui/Graficos.jsx";
 import { Botao, Carregando, Dialogo, TituloPagina, Vazio } from "../../ui/ui.jsx";
+import { CartaoProva } from "../../ui/Provas.jsx";
+import { materialDoPrograma } from "../../midia.js";
 import { ApagarRegistro, FormSimulado, podeCorrigir } from "../comum/Registros.jsx";
 
 export function LinkPdf({ arquivo }) {
@@ -110,6 +112,65 @@ export function SimuladosDoAluno({ alunoId, registros, moderador = false, cursoP
   );
 }
 
+/* Provas para fazer: a galeria que o moderador monta. A capa abre o PDF;
+   "Registrar resultado" já vem com a prova preenchida. */
+function ProvaDoAluno({ prova, resultado, aoRegistrar }) {
+  const { url } = useArquivoUrl(prova.arquivo?.ref);
+  return (
+    <CartaoProva prova={prova} urlPdf={url} resultado={resultado}
+      acoes={(
+        <div className="cartao-prova-acoes">
+          {url ? <a className="btn btn--solido btn--sm" href={url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Abrir prova</a>
+            : <span className="previa-linha">PDF indisponível neste aparelho</span>}
+          <Botao variante="texto" tamanho="sm" icone={ClipboardCheck} onClick={aoRegistrar}>{resultado ? "Registrar de novo" : "Registrar resultado"}</Botao>
+        </div>
+      )} />
+  );
+}
+
+function ProvasParaFazer({ alunoId, registros, cursoPadrao }) {
+  const { ind } = useApp();
+  const provas = useProvas();
+  const plano = usePlano(alunoId);
+  const [vestibular, setVestibular] = useState("");
+  const [registrar, setRegistrar] = useState(null);
+  if (!provas || plano === undefined) return null;
+  const doPrograma = provas.filter((p) => materialDoPrograma(p, plano?.modeloId || null));
+  if (!doPrograma.length) return null;
+  const exames = [...new Set(doPrograma.map((p) => p.vestibularId).filter(Boolean))];
+  const lista = doPrograma.filter((p) => !vestibular || p.vestibularId === vestibular);
+  // o resultado mais recente de cada prova
+  const ultimo = {};
+  registros.filter((r) => r.provaId).forEach((r) => { if (!ultimo[r.provaId] || r.data > ultimo[r.provaId].data) ultimo[r.provaId] = r; });
+
+  return (
+    <section className="secao" aria-labelledby="t-provas">
+      <div className="linha-titulo-secao">
+        <h2 id="t-provas" className="subtitulo">Provas para fazer <small>abra o PDF, resolva e registre o resultado</small></h2>
+        {exames.length > 1 && (
+          <div className="filtros filtros--compacto" role="tablist" aria-label="Exame">
+            {[["", "Todas"], ...exames.map((id) => [id, ind.nomeVestibular(id)])].map(([id, nome]) => (
+              <button key={id || "todas"} type="button" role="tab" className="filtro" aria-selected={vestibular === id} onClick={() => setVestibular(id)}>{nome}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="grade-provas">
+        {lista.map((p) => (
+          <ProvaDoAluno key={p.id} prova={p} aoRegistrar={() => setRegistrar(p)}
+            resultado={ultimo[p.id] ? fmtPct(pct(ultimo[p.id].acertos, ultimo[p.id].total)) : null} />
+        ))}
+      </div>
+      <Dialogo aberto={!!registrar} aoFechar={() => setRegistrar(null)} titulo="Registrar resultado" largura={560}>
+        {registrar && (
+          <FormSimulado alunoId={alunoId} cursoPadrao={cursoPadrao} aoConcluir={() => setRegistrar(null)} aoCancelar={() => setRegistrar(null)}
+            inicial={{ vestibularId: registrar.vestibularId || "", nome: registrar.titulo, ano: registrar.ano ?? "", provaId: registrar.id }} />
+        )}
+      </Dialogo>
+    </section>
+  );
+}
+
 export default function SimuladosAluno() {
   const eu = useEu();
   const aluno = useAluno(eu.id);
@@ -119,7 +180,9 @@ export default function SimuladosAluno() {
   return (
     <>
       <TituloPagina eyebrow="Provas completas" frase={t("painel.simulados.titulo")}
-        texto="O histórico fica separado por vestibular: cada prova tem a sua escala, então não há comparação entre elas." />
+        texto="Escolha uma prova, resolva no tempo dela e registre o resultado. O histórico fica separado por vestibular: cada prova tem a sua escala." />
+      <ProvasParaFazer alunoId={eu.id} registros={registros} cursoPadrao={aluno?.cursoId} />
+      <h2 className="subtitulo secao-titulo">Seus resultados</h2>
       <SimuladosDoAluno alunoId={eu.id} registros={registros} cursoPadrao={aluno?.cursoId} />
     </>
   );

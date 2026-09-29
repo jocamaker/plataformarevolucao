@@ -45,6 +45,8 @@ export const usePlanosAnteriores = (id) => usar(id && ((s, cb) => s.planos.obser
 
 // conteúdo e configuração
 export const useMateriais = () => usar((s, cb) => s.materiais.observar(cb), []);
+export const useAreasMateriais = () => usar((s, cb) => s.materiais.observarAreas(cb), []);
+export const useProvas = () => usar((s, cb) => s.provas.observar(cb), []);
 export const usePlaylists = () => usar((s, cb) => s.playlists.observar(cb), []);
 export const useConfigTextos = () => usar((s, cb) => s.textos.observar(cb), []);
 export const useTextosDoAluno = (id) => usar(id && ((s, cb) => s.textos.observarDoAluno(id, cb)), [id]);
@@ -139,9 +141,7 @@ export function useAcao() {
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState(null);
   const vivo = useRef(true);
-  // o StrictMode (dev) monta, desmonta e monta de novo: religa a cada montagem,
-  // senão o botão fica preso em "Enviando…" e o erro nunca aparece
-  useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
+  useEffect(() => () => { vivo.current = false; }, []);
   const executar = useCallback(async (fn) => {
     setOcupado(true);
     setErro(null);

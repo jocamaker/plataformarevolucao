@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <!-- Fios de seda sobre as ondas de fundo-ondas.svg (mesma geometria). -->
+  <defs>
+    <linearGradient id="fio" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.5"/>
+      <stop offset="0.7" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#fio)" stroke-linecap="round">
+    <path stroke-width="1.4" d="M-100 590 C 240 480 560 670 900 540 S 1420 310 1700 350"/>
+    <path stroke-width="0.9" stroke-opacity="0.6" d="M-100 634 C 240 526 560 714 900 586 S 1420 358 1700 398"/>
+    <path stroke-width="0.9" stroke-opacity="0.5" d="M-100 895 C 300 815 640 925 1000 845 S 1480 715 1700 745"/>
+  </g>
+</svg>

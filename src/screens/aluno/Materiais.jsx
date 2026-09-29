@@ -1,13 +1,13 @@
-import { useMemo } from "react";
-import { FileDown, Library } from "lucide-react";
-import { useAluno, useArquivoUrl, useEu, useFrases, useMateriais, usePlano } from "../../state/hooks.js";
-import { fmtDataLonga } from "../../core/datas.js";
-import { fmtTamanho } from "../../core/validacao.js";
-import { TIPOS_MATERIAL, nomeTipoMaterial } from "../../services/materiais.js";
-import { BarraFiltros, useFiltros } from "../../ui/Filtros.jsx";
-import { NomeConteudo, PontoMateria, nomesDosProgramas } from "../../ui/Conteudo.jsx";
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, FileDown, Library, ListChecks } from "lucide-react";
+import { useAreasMateriais, useArquivoUrl, useEu, useFrases, useMateriais, usePlano } from "../../state/hooks.js";
+import { TIPOS_MATERIAL } from "../../services/materiais.js";
 import { materialDoPrograma } from "../../midia.js";
-import { Carregando, TituloPagina, Vazio } from "../../ui/ui.jsx";
+import { AREA_OUTROS, BotaoAbrirPdf, CartaoLista, IconeArea, TileArea } from "../../ui/Areas.jsx";
+import { BarraFiltros, useFiltros } from "../../ui/Filtros.jsx";
+import { Botao, Carregando, Dialogo, TituloPagina, Vazio } from "../../ui/ui.jsx";
+import { FormQuestoes } from "../comum/Registros.jsx";
 
 const sem = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -22,6 +22,14 @@ export function filtrarMateriais(lista, f) {
     && (!busca || sem(`${m.titulo} ${m.descricao} ${(m.tags || []).join(" ")}`).includes(busca)));
 }
 
+// materiais agrupados por área; os sem área (ou de área apagada) vão para "outros"
+export function agruparPorArea(materiais, areas) {
+  const ids = new Set(areas.map((a) => a.id));
+  const grupos = {};
+  materiais.forEach((m) => { const k = m.areaId && ids.has(m.areaId) ? m.areaId : AREA_OUTROS.id; (grupos[k] ||= []).push(m); });
+  return grupos;
+}
+
 export function AbrirPdf({ arquivo, rotulo = "Abrir PDF" }) {
   const { url, carregando, faltando } = useArquivoUrl(arquivo?.ref);
   if (!arquivo) return null;
@@ -30,47 +38,88 @@ export function AbrirPdf({ arquivo, rotulo = "Abrir PDF" }) {
   return <a className="btn btn--solido btn--sm" href={url} target="_blank" rel="noreferrer" download={arquivo.nome}><FileDown aria-hidden="true" />{rotulo}</a>;
 }
 
-export function CartaoMaterial({ m, acoes, programas }) {
+// materiais publicados que valem para o programa (jornada) do aluno
+function useMateriaisDoAluno() {
+  const eu = useEu();
+  const plano = usePlano(eu.id);
+  const materiais = useMateriais();
+  const areas = useAreasMateriais();
+  const visiveis = useMemo(() => (materiais && plano !== undefined ? materiais.filter((m) => materialDoPrograma(m, plano?.modeloId || null)) : null), [materiais, plano]);
+  return { eu, visiveis, areas };
+}
+
+/* Materiais: um bloco por área que tem algo para o aluno. */
+export default function MateriaisAluno() {
+  const { eu, visiveis, areas } = useMateriaisDoAluno();
+  const t = useFrases(eu);
+  if (!visiveis || !areas) return <Carregando />;
+  const grupos = agruparPorArea(visiveis, areas);
+  const blocos = [...areas.filter((a) => grupos[a.id]?.length), ...(grupos.outros?.length ? [AREA_OUTROS] : [])];
   return (
-    <article className="cartao cartao-material">
-      <div className="cartao-material-topo">
-        <span className="etiqueta">{nomeTipoMaterial(m.tipo)}</span>
-        {programas && <span className="etiqueta">{nomesDosProgramas(m.programaIds, programas)}</span>}
-        {m.publicado === false && <span className="etiqueta etiqueta--perigo">Rascunho</span>}
-      </div>
-      <h3>{m.titulo}</h3>
-      {m.materiaId && <p className="celula-conteudo"><PontoMateria materiaId={m.materiaId} /><NomeConteudo materiaId={m.materiaId} topicoId={m.topicoId} subtopicoId={m.subtopicoId} /></p>}
-      {m.descricao && <p className="cartao-material-desc">{m.descricao}</p>}
-      {m.tags?.length > 0 && <p className="tags">{m.tags.map((t) => <span key={t}>#{t}</span>)}</p>}
-      <div className="cartao-material-rodape">
-        <small className="num">{fmtDataLonga(m.data)}{m.arquivo?.tamanho ? ` · ${fmtTamanho(m.arquivo.tamanho)}` : ""}</small>
-        {acoes || <AbrirPdf arquivo={m.arquivo} />}
-      </div>
-    </article>
+    <>
+      <TituloPagina eyebrow="Listas e PDFs do professor" frase={t("painel.materiais.titulo")} texto="Escolha a área para ver as listas e os materiais de cada tópico." />
+      {blocos.length === 0
+        ? <div className="cartao"><Vazio icone={Library} titulo="Nenhum material publicado ainda" texto="Quando o professor publicar uma lista ou um PDF, ele aparece aqui." /></div>
+        : (
+          <div className="grade-areas">
+            {blocos.map((a) => <TileArea key={a.id} area={a} to={a.id} detalhe={`${grupos[a.id].length} ${grupos[a.id].length === 1 ? "material" : "materiais"}`} />)}
+          </div>
+        )}
+    </>
   );
 }
 
-/* Materiais do programa (jornada) do aluno, filtráveis por matéria, tópico,
-   subtópico e tipo. */
-export default function MateriaisAluno() {
-  const eu = useEu();
-  const aluno = useAluno(eu.id);
-  const plano = usePlano(eu.id);
-  const materiais = useMateriais();
-  const t = useFrases(aluno || eu);
+/* Uma área: os materiais dela, com filtros e, para listas, o registro dos acertos. */
+export function AreaMateriaisAluno() {
+  const { areaId } = useParams();
+  const { eu, visiveis, areas } = useMateriaisDoAluno();
   const filtros = useFiltros();
+  const [registrar, setRegistrar] = useState(null); // material
+  const [retorno, setRetorno] = useState("");
+  const area = areaId === AREA_OUTROS.id ? AREA_OUTROS : areas?.find((a) => a.id === areaId);
   const lista = useMemo(() => {
-    if (!materiais || plano === undefined) return [];
-    return filtrarMateriais(materiais, filtros.f).filter((m) => materialDoPrograma(m, plano?.modeloId || null));
-  }, [materiais, filtros.f, plano]);
-  if (!materiais || plano === undefined) return <Carregando />;
+    if (!visiveis || !areas) return [];
+    return filtrarMateriais(agruparPorArea(visiveis, areas)[areaId] || [], filtros.f);
+  }, [visiveis, areas, areaId, filtros.f]);
+  if (!visiveis || !areas) return <Carregando />;
+  if (!area) return <><Link to="/aluno/materiais" className="voltar"><ArrowLeft aria-hidden="true" />Materiais</Link><div className="cartao"><Vazio icone={Library} titulo="Área não encontrada" /></div></>;
+
   return (
     <>
-      <TituloPagina eyebrow="PDFs do professor" frase={t("painel.materiais.titulo")} />
+      <Link to="/aluno/materiais" className="voltar"><ArrowLeft aria-hidden="true" />Todas as áreas</Link>
+      <header className="cabeca-area" style={{ "--cor": area.cor }}>
+        <span className="cabeca-area-icone"><IconeArea icone={area.icone} /></span>
+        <div>
+          {area.rotulo && <span className="eyebrow">{area.rotulo}</span>}
+          <h1>{area.nome}</h1>
+        </div>
+      </header>
       <BarraFiltros filtros={filtros} campos={["busca", "conteudo", "tipo"]} tipos={TIPOS_MATERIAL} rotuloBusca="Buscar por título ou tag" />
       {lista.length === 0
-        ? <div className="cartao"><Vazio icone={Library} titulo={filtros.ativo ? "Nenhum material com esses filtros" : "Nenhum material publicado ainda"} texto={filtros.ativo ? "Limpe os filtros para ver todos." : "Quando o professor publicar um PDF, ele aparece aqui."} /></div>
-        : <div className="grade-materiais">{lista.map((m) => <CartaoMaterial key={m.id} m={m} />)}</div>}
+        ? <div className="cartao"><Vazio icone={Library} titulo="Nada com esses filtros" texto="Limpe os filtros para ver todos." /></div>
+        : (
+          <div className="grade-listas">
+            {lista.map((m) => (
+              <CartaoLista key={m.id} m={m} area={area} acoes={(
+                <div className="cartao-lista-acoes">
+                  <BotaoAbrirPdf arquivo={m.arquivo} rotulo={m.tipo === "lista" ? "Abrir lista" : "Abrir PDF"} />
+                  {m.materiaId && m.topicoId && <Botao variante="texto" tamanho="sm" icone={ListChecks} onClick={() => { setRetorno(""); setRegistrar(m); }}>Registrar acertos</Botao>}
+                </div>
+              )} />
+            ))}
+          </div>
+        )}
+      <Dialogo aberto={!!registrar} aoFechar={() => setRegistrar(null)} titulo={registrar ? `Acertos · ${registrar.titulo}` : ""} largura={520}>
+        {registrar && (retorno ? (
+          <div className="form">
+            <p className="retorno" role="status">{retorno}</p>
+            <div className="dialogo-acoes"><Botao variante="solido" onClick={() => setRegistrar(null)}>Fechar</Botao></div>
+          </div>
+        ) : (
+          <FormQuestoes alunoId={eu.id} aoConcluir={setRetorno} aoCancelar={() => setRegistrar(null)}
+            inicial={{ materiaId: registrar.materiaId, topicoId: registrar.topicoId, subtopicoId: registrar.subtopicoId || "", total: registrar.questoes ?? "" }} />
+        ))}
+      </Dialogo>
     </>
   );
 }

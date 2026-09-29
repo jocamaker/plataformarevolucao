@@ -6,37 +6,32 @@
    Dados: config/textos { geral, porGrupo: { "curso:ID" | "vestibular:ID" }, corDestaque }
           textosAluno/{uid} { textos } */
 
-export const COR_DESTAQUE_PADRAO = "#D9B56B";
+// cor do destaque na frase da tela de login (fundo branco)
+export const COR_DESTAQUE_PADRAO = "#5B4BE0";
 
 export const CORES_SUGERIDAS = [
-  { nome: "Ouro", cor: "#D9B56B" },
-  { nome: "Prata", cor: "#C9CED6" },
-  { nome: "Branco", cor: "#FFFFFF" },
-  { nome: "Cinza", cor: "#9A9A9A" },
-  { nome: "Gelo", cor: "#9DBEFF" },
-  { nome: "Rubi", cor: "#E0606A" },
+  { nome: "Violeta", cor: "#5B4BE0" },
+  { nome: "Azul", cor: "#3F63F5" },
+  { nome: "Laranja", cor: "#E2761B" },
+  { nome: "Rubi", cor: "#C9405A" },
+  { nome: "Verde", cor: "#1E8F63" },
+  { nome: "Grafite", cor: "#2B2B33" },
 ];
 
 export const VARIAVEIS = ["nome", "saudacao", "vestibular"];
 
 export const GRUPOS = [
-  { id: "inicial", titulo: "Página inicial", descricao: "Tela de login. É pública, então vale para todos os visitantes.", porAluno: false },
-  { id: "boasvindas", titulo: "Boas-vindas do aluno", descricao: "Tela que o aluno vê logo depois de entrar.", porAluno: true },
+  { id: "inicial", titulo: "Tela de login", descricao: "É pública, então vale para todos os visitantes.", porAluno: false },
   { id: "painel", titulo: "Painel do aluno", descricao: "Títulos e mensagens dentro da plataforma.", porAluno: true },
 ];
 
-// tipo: "cinema" (título grande sobre o vídeo), "titulo" (título de página), "linha", "paragrafo"
+// tipo: "titulo" (título, com *destaque*), "linha", "paragrafo"
 export const TEXTOS = {
-  "inicial.selo": { grupo: "inicial", tipo: "linha", rotulo: "Selo acima da frase", padrao: "Plataforma de estudos para vestibular" },
-  "inicial.titulo": { grupo: "inicial", tipo: "cinema", rotulo: "Frase principal", padrao: "Bem-vindo à *elite*." },
+  "inicial.selo": { grupo: "inicial", tipo: "linha", rotulo: "Linha abaixo de \u201cEntrar na plataforma\u201d", padrao: "Plataforma de estudos para vestibular" },
+  "inicial.titulo": { grupo: "inicial", tipo: "titulo", rotulo: "Frase principal", padrao: "Bem-vindo à *elite*." },
   "inicial.lede": { grupo: "inicial", tipo: "paragrafo", rotulo: "Texto de apoio", padrao: "Ciclos de estudo por vestibular, metas diárias que cabem na sua rotina e revisões no tempo certo, com o professor acompanhando." },
 
-  "boasvindas.selo": { grupo: "boasvindas", tipo: "linha", rotulo: "Selo", padrao: "Foco: {vestibular}" },
-  "boasvindas.saudacao": { grupo: "boasvindas", tipo: "cinema", rotulo: "Primeira linha", padrao: "{saudacao}, {nome}." },
-  "boasvindas.comMetas": { grupo: "boasvindas", tipo: "cinema", rotulo: "Segunda linha, em dia com metas", padrao: "Suas metas de hoje *já estão prontas*." },
-  "boasvindas.semMetas": { grupo: "boasvindas", tipo: "cinema", rotulo: "Segunda linha, em dia livre", padrao: "Hoje é dia *livre*." },
-
-  "painel.dashboard.titulo": { grupo: "painel", tipo: "titulo", rotulo: "Título do Dashboard", padrao: "Seu *dashboard*" },
+  "painel.dashboard.saudacao": { grupo: "painel", tipo: "titulo", rotulo: "Saudação do Dashboard", padrao: "{saudacao}, *{nome}*." },
   "painel.dashboard.vazioTitulo": { grupo: "painel", tipo: "linha", rotulo: "Dia sem metas: título", padrao: "Nenhuma meta para hoje" },
   "painel.dashboard.vazioTexto": { grupo: "painel", tipo: "paragrafo", rotulo: "Dia sem metas: texto", padrao: "Dia livre no seu plano. Use para revisar ou registrar estudo por fora." },
   "painel.semana.texto": { grupo: "painel", tipo: "paragrafo", rotulo: "Instrução da semana (Dashboard)", padrao: "Arraste uma meta para outro dia, ou toque nela e depois no dia. Só vale para esta semana; as próximas continuam automáticas." },

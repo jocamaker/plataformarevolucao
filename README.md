@@ -5,11 +5,23 @@ React 19 + Vite. Dois papéis, **aluno** e **moderador**, sobre dados reais.
 - **Aluno**: Dashboard (metas de hoje ou da semana), Edital (matérias em
   blocos → tópicos → subtópicos; corta o que já viu, volta a ver, muda a
   ordem), Meus cursos (aulas em vídeo), Redação, Desempenho e, em Extra,
-  Questões, Simulados e Materiais.
+  Questões, Simulados e Materiais. Materiais abre em blocos coloridos por
+  área (Listas de Física…); dentro, cada lista mostra matéria, tópico e
+  número de questões, e "Registrar acertos" já vem preenchido. Simulados
+  mostra a galeria de provas (capa do caderno em cima, nome embaixo): abrir
+  o PDF, resolver e registrar o resultado ligado à prova.
 - **Moderador**: quase tudo fica dentro de cada aluno (edital com incidência,
   metas e matérias visíveis só para ele, redações, registros, histórico).
   No geral: Jornadas (o conteúdo programático de cada vestibular/curso),
-  Materiais em PDF e Aulas em vídeo, filtráveis por programa.
+  Materiais (cria as áreas, com um clique cria uma por matéria, e anexa as
+  listas dentro delas), Simulados (anexa o PDF de cada prova; a capa sai
+  sozinha do alto da primeira página, com pdf.js, ou de uma imagem enviada)
+  e Aulas em vídeo, tudo filtrável por programa.
+- **Entrada**: login num cartão branco sobre ondas lisas e paradas em SVG
+  (azul, anil e um toque de água; `assets/fundo-ondas.svg` e `fundo-fios.svg`); quem
+  entra vai direto para o Dashboard (aluno) ou para Alunos (moderador). A
+  frase, o texto e a foto do professor do lado direito se editam em Textos.
+  Uma fonte só (Inter); tema claro por padrão, com o escuro no botão de tema.
 
 ## Rodar
 
@@ -140,8 +152,10 @@ firestore.rules, storage.rules   controle de acesso real
 | `semanas/{alunoId}`, `resumosSemana` | metas da semana atual e fechamento das semanas |
 | `sessoesEstudo` | cada estudo feito (data, conteúdo, minutos, origem) |
 | `revisoes` | revisões espaçadas (agendada, realizada, atrasada, ignorada) |
-| `questoes`, `simulados` | registros do aluno (simulado com PDF opcional no Storage) |
-| `materiais` | metadados do PDF (título, matéria/tópico/subtópico, tipo, programas, data, tags, referência do arquivo) |
+| `questoes`, `simulados` | registros do aluno (simulado com PDF opcional no Storage e `provaId` quando veio da galeria) |
+| `areasMateriais` | as áreas de Materiais (nome, linha de cima, cor, ícone, matéria sugerida, ordem) |
+| `materiais` | metadados do PDF (título, área, matéria/tópico/subtópico, tipo, número de questões, programas, data, tags, referência do arquivo) |
+| `provas` | provas para simulado (nome, exame, ano, programas, publicada, referência do PDF e da capa no Storage) |
 | `playlists`, `progressoVideos` | aulas em vídeo (com os programas que veem) e aulas assistidas |
 | `devolutivas` | correções de redação (foto marcada, textos anexados, notas, observações) |
 | `notificacoes` | um documento por aluno e aviso (`lidaEm` por aluno) |

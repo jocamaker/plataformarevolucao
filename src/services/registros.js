@@ -96,6 +96,7 @@ export function servicoSimulados(ctx) {
       vestibularId: d.vestibularId || "", nome: String(d.nome || "").trim(), ano: d.ano === "" || d.ano == null ? null : Number(d.ano),
       cursoId: d.cursoId || null, data: d.data, total: numero(d.total), acertos: numero(d.acertos), erros: numero(d.erros),
       obs: String(d.obs || "").trim().slice(0, 1000),
+      provaId: d.provaId || null, // a prova da galeria de simulados, se veio de lá
     };
     const v = validarSimulado(r, ctx.hoje());
     if (r.vestibularId && !v.erros.vestibularId && !ind.vestibular(r.vestibularId)) v.erros.vestibularId = "Vestibular inválido.";
