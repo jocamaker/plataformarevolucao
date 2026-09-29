@@ -4,7 +4,7 @@ import {
   ArrowLeft, BookOpen, ClipboardList, History, LayoutDashboard, ListChecks, PenLine, Replace, TrendingUp, Trash2, UserCog,
 } from "lucide-react";
 import { useApp } from "../../state/AppContext.jsx";
-import { errosDeCampo, useAcao, useModelos, usePlanosAnteriores } from "../../state/hooks.js";
+import { errosDeCampo, useAcao, useMigracaoMotor, useModelos, usePlanosAnteriores } from "../../state/hooks.js";
 import { useVisaoAluno } from "../../state/aluno.js";
 import { fmtMin } from "../../core/nucleo.js";
 import { fmtDataCurta, fmtDataLonga } from "../../core/datas.js";
@@ -222,6 +222,8 @@ export default function AlunoPainel() {
   const aba = ABAS.some((a) => a.k === params.get("aba")) ? params.get("aba") : "geral";
   const mudarAba = (k) => setParams(k === "geral" ? {} : { aba: k }, { replace: true });
   const [trocar, setTrocar] = useState(false);
+  // plano gravado antes do motor de blocos e pesos: converte ao abrir o painel
+  useMigracaoMotor(!!v.planoBruto && v.planoBruto.motorVersao !== 2, id);
   if (v.carregando) return <Carregando />;
   if (!v.aluno) return <><Link to="/moderador/alunos" className="voltar"><ArrowLeft aria-hidden="true" />Alunos</Link><div className="cartao"><Vazio icone={UserCog} titulo="Aluno não encontrado" /></div></>;
 
@@ -237,6 +239,12 @@ export default function AlunoPainel() {
           <Botao variante={v.plano ? "vidro" : "solido"} icone={Replace} onClick={() => setTrocar(true)}>{v.plano ? "Trocar jornada" : "Aplicar jornada"}</Botao>
         </div>
       </header>
+      {v.semana?.semTempo?.length > 0 && (
+        <p className="aviso aviso--erro" role="note">
+          Sem tempo na semana para {v.semana.semTempo.map((mid) => v.ind.nomeMateria(mid)).join(", ")}: o tempo de estudo que o aluno fixou não comporta um bloco de 30 min de cada matéria ativa.
+          Aumente o tempo dele ou revise as matérias ativas.
+        </p>
+      )}
       <Abas rotulo="Seções do aluno" itens={ABAS} ativa={aba} aoMudar={mudarAba} />
       {aba === "geral" && <VisaoGeral v={v} />}
       {aba === "edital" && (v.plano ? <EditalDoAluno v={v} modo="moderador" /> : (

@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, GraduationCap, LogOut, Moon, RotateCcw, Sun } from "lucide-react";
 import { useApp } from "../state/AppContext.jsx";
-import { useNotificacoes } from "../state/hooks.js";
+import { useNotificacoes, useMigracaoMotor } from "../state/hooks.js";
 import { useTema } from "../state/tema.js";
 import { baseDoPapel, todosDoMenu } from "../navegacao.js";
 import { MenuCheio } from "../ui/MenuCheio.jsx";
@@ -25,6 +25,7 @@ function Sino({ alunoId, rota }) {
    tela cheia. */
 export default function Shell({ menu }) {
   const { usuario, sair, recomecarDemonstracao, modo } = useApp();
+  useMigracaoMotor(usuario?.role === "moderador"); // jornadas antigas → motor de blocos e pesos
   const [tema, alternarTema] = useTema();
   const { pathname } = useLocation();
   const navigate = useNavigate();

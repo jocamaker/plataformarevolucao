@@ -16,6 +16,7 @@ import {
   validarLimites,
 } from "../core/plano.js";
 import { DURACOES_META, MAX_SESSAO_PADRAO } from "../core/blocos.js";
+import { MOTOR_VERSAO, migrarPlanoV2 } from "../core/migracao.js";
 import { DISP_PADRAO } from "../core/nucleo.js";
 import { ErroValidacao, opsDeLog, porNome } from "./base.js";
 
@@ -268,6 +269,40 @@ export function servicoPlanos(ctx, servicos) {
     async aplicarNaJornada({ modeloId, alunoId, op, propagar = false, motivo = "" }) {
       if (modeloId) await this.alterarJornada(modeloId, op, { propagar, motivo: motivo || "Incluído pela jornada" });
       if (alunoId) await this.alterar(alunoId, op, { motivo });
+    },
+
+    /* Migração para o motor de blocos e pesos (motorVersao 2), automática e
+       idempotente: jornadas sempre; planos do aluno informado, ou de todos com
+       todosAlunos. Cada documento convertido grava um log "migrarMotor". O
+       aluno não grava `materias`: até o moderador passar por aqui, o motor
+       converte o plano dele em memória. */
+    async migrarMotor({ alunoId = null, todosAlunos = false } = {}) {
+      ctx.exigir("gerenciar:modelos");
+      const ind = await ctx.indice();
+      let modelos = 0, alunos = 0;
+      const descrever = (p) => (p.materias || []).filter((m) => m.ativa !== false).map((m) => `${ind.nomeMateria(m.materiaId)} ${m.peso}`).join(", ");
+      for (const m of await repo.listar("modelosPlano")) {
+        if (m.motorVersao === MOTOR_VERSAO) continue;
+        const r = migrarPlanoV2(m);
+        const { id, ...doc } = r.plano;
+        await repo.lote([
+          { tipo: "definir", colecao: "modelosPlano", id, dados: { ...doc, atualizadoEm: carimbo() } },
+          ...opsDeLog(ctx, { entidade: "modelo", entidadeId: id }, [{ tipo: "migrarMotor", descricao: `Converteu a jornada ${m.nome} para o motor de blocos e pesos`, antes: null, depois: descrever(r.plano) }]),
+        ]);
+        modelos++;
+      }
+      if (alunoId || todosAlunos) ctx.exigir("gerenciar:alunos");
+      const planos = alunoId ? [await repo.obter("planos", alunoId)].filter(Boolean) : todosAlunos ? await repo.listar("planos") : [];
+      for (const p of planos) {
+        if (p.motorVersao === MOTOR_VERSAO) continue;
+        const prog = (await repo.obter("progresso", p.id))?.itens || {};
+        const r = migrarPlanoV2(p, { minimo: minimoSemanal(migrarPlanoV2(p).plano, ind, prog) });
+        await gravarPlano(p.id, r.plano, prog, ind, [{
+          tipo: "migrarMotor", descricao: "Converteu o edital para o motor de blocos de 30 min e pesos", antes: null, depois: descrever(r.plano),
+        }]);
+        alunos++;
+      }
+      return { modelos, alunos };
     },
 
     alunosDaJornada: async (modeloId) => (await repo.listar("planos", [["modeloId", "==", modeloId]])).map((p) => p.id),

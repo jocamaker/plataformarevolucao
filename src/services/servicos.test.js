@@ -658,3 +658,38 @@ describe("motor de metas: o que o aluno ajusta", () => {
     expect(est.metas.ter.find((m) => m.tipo === "revisao" && m.materiaId === "biologia")?.minutos).toBe(60);
   });
 });
+
+describe("migração para o motor de blocos e pesos", () => {
+  it("plano e jornada antigos viram v2 com log; a segunda execução não muda nada; o aluno já vê blocos de 30", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    // simula dados gravados antes do motor novo
+    const plano = await t.repo.obter("planos", ana);
+    const { id: _p, ...docPlano } = plano;
+    const velho = {
+      ...docPlano, motorVersao: undefined, limitesTempo: undefined, revisao: { intervalos: [7, 15, 30], duracaoMin: 20 },
+      disponibilidade: { seg: 45, ter: 105, qua: 90, qui: 120, sex: 60, sab: 75, dom: 0 },
+      materias: plano.materias.map((m, i) => ({ ...m, peso: undefined, minutosSemanais: [300, 240, 120, 45][i % 4], maxSessao: 45, prioridade: 2 })),
+    };
+    const { id: _m, ...modelo } = await t.repo.obter("modelosPlano", "modelo-fuvest");
+    await t.repo.lote([
+      { tipo: "definir", colecao: "planos", id: ana, dados: JSON.parse(JSON.stringify(velho)) },
+      { tipo: "definir", colecao: "modelosPlano", id: "modelo-fuvest", dados: JSON.parse(JSON.stringify({ ...modelo, motorVersao: undefined, materias: velho.materias })) },
+    ]);
+    // antes da migração gravada: o motor converte em memória
+    await t.entrar("aluno@curso.com");
+    const est = await t.s.estudo.garantirSemana(ana);
+    expect(Object.values(est.metas).flat().every((m) => m.minutos % 30 === 0)).toBe(true);
+
+    await t.entrar("moderador@curso.com");
+    expect(await t.s.planos.migrarMotor({ alunoId: ana })).toEqual({ modelos: 1, alunos: 1 });
+    const novo = await t.repo.obter("planos", ana);
+    expect(novo.motorVersao).toBe(2);
+    expect(novo.materias.every((m) => [1, 2, 3].includes(m.peso) && m.maxSessao === 60)).toBe(true);
+    expect(novo.revisao).toEqual({ intervalos: [7, 15, 30] });
+    expect(Object.values(novo.disponibilidade).every((v) => v % 30 === 0)).toBe(true);
+    const logs = await t.repo.listar("logs", [["tipo", "==", "migrarMotor"]]);
+    expect(logs.map((l) => l.entidade).sort()).toEqual(["modelo", "plano"]);
+    expect(await t.s.planos.migrarMotor({ todosAlunos: true })).toEqual({ modelos: 0, alunos: 0 });
+    expect(await t.repo.listar("logs", [["tipo", "==", "migrarMotor"]])).toHaveLength(2);
+  });
+});
