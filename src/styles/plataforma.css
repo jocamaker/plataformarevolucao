@@ -593,3 +593,4 @@ h1, h2, h3, h4,
 .chip--travada { opacity: 0.55; cursor: not-allowed; }
 .pendentes-semana { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
 .dia--bloqueado { opacity: 0.55; }
+.link-pesos { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--acento); text-decoration: underline; text-underline-offset: 3px; }

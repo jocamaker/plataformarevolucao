@@ -74,7 +74,7 @@ export function QuadroSemana({ v, texto }) {
           <Botao variante="vidro" tamanho="sm" icone={RotateCcw} disabled={ocupado} onClick={() => executar(() => s.estudo.reorganizar(alunoId))}>Voltar ao automático</Botao>
         )}
       </div>
-      <MensagemErro erro={erro} />
+      <MensagemErro erro={erro || v.erroSemana} />
       {est.editada && (
         <div className="aviso"><Sparkles aria-hidden="true" />Semana reorganizada por você. Voltar ao automático refaz só o que ainda não foi feito, de hoje em diante.</div>
       )}

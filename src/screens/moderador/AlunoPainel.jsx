@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft, BookOpen, ClipboardList, History, LayoutDashboard, ListChecks, PenLine, Replace, TrendingUp, Trash2, UserCog,
+  ArrowLeft, BookOpen, ClipboardList, History, LayoutDashboard, ListChecks, PenLine, Replace, Scale, TrendingUp, Trash2, UserCog,
 } from "lucide-react";
 import { useApp } from "../../state/AppContext.jsx";
 import { errosDeCampo, useAcao, useMigracaoMotor, useModelos, usePlanosAnteriores } from "../../state/hooks.js";
@@ -14,7 +14,7 @@ import { fmtPct } from "../../core/desempenho.js";
 import { CalendarioDias } from "../../ui/Graficos.jsx";
 import { NomeConteudo, PontoMateria } from "../../ui/Conteudo.jsx";
 import { Abas, Botao, Campo, Carregando, Confirmar, MensagemErro, Tile, Vazio } from "../../ui/ui.jsx";
-import { EditalDoAluno, Historico, ListaRevisoes } from "../comum/Edital.jsx";
+import { EditalDoAluno, Historico, ListaRevisoes, PesosDoAluno } from "../comum/Edital.jsx";
 import { PainelDesempenho } from "../comum/Desempenho.jsx";
 import { QuestoesDoAluno } from "../aluno/Questoes.jsx";
 import { SimuladosDoAluno } from "../aluno/Simulados.jsx";
@@ -206,6 +206,7 @@ function Perfil({ v }) {
 const ABAS = [
   { k: "geral", label: "Visão geral", icone: LayoutDashboard },
   { k: "edital", label: "Edital", icone: ListChecks },
+  { k: "pesos", label: "Pesos", icone: Scale },
   { k: "redacao", label: "Redação", icone: PenLine },
   { k: "desempenho", label: "Desempenho", icone: TrendingUp },
   { k: "registros", label: "Registros", icone: ClipboardList },
@@ -251,6 +252,9 @@ export default function AlunoPainel() {
       {aba === "edital" && (v.plano ? <EditalDoAluno v={v} modo="moderador" /> : (
         <div className="cartao"><Vazio icone={ListChecks} titulo="Este aluno ainda não tem edital" texto="Aplique a jornada do vestibular dele; depois ela vira uma cópia individual, que você ajusta aqui." />
           <Botao variante="solido" onClick={() => setTrocar(true)}>Aplicar jornada</Botao></div>
+      ))}
+      {aba === "pesos" && (v.plano ? <PesosDoAluno v={v} /> : (
+        <div className="cartao"><Vazio icone={Scale} titulo="Este aluno ainda não tem edital" texto="Aplique a jornada dele; depois os pesos das matérias se ajustam aqui, só para ele." /></div>
       ))}
       {aba === "redacao" && <RedacoesDoAluno aluno={v.aluno} />}
       {aba === "desempenho" && <PainelDesempenho v={v} />}

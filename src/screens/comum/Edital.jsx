@@ -708,6 +708,32 @@ export function Historico({ alunoId, entidades }) {
   );
 }
 
+/* ---------- Pesos de UM aluno (moderador, no painel do aluno) ---------- */
+
+/* O peso é individual: aqui o moderador ajusta as matérias e os pesos só
+   deste aluno, conforme as dificuldades dele. A jornada guarda apenas o peso
+   inicial de quem entra nela (Pesos iniciais). */
+export function PesosDoAluno({ v }) {
+  const confirmada = useEdicaoPlano(v.aluno.id);
+  const modelos = useModelos(true);
+  const jornada = modelos?.find((m) => m.id === v.plano.modeloId);
+  const pendentes = new Set(v.itens.filter((it) => !v.estado(it).concluido).map((it) => it.materiaId));
+  const capacidade = capacidadeSemanal(v.plano.disponibilidade);
+  return (
+    <>
+      <p className="aviso" role="note">
+        <Settings2 aria-hidden="true" />
+        Pesos só de <b>{v.aluno.nome}</b>: mudar aqui não afeta nenhum outro aluno nem a jornada. Ajuste conforme a dificuldade em cada matéria.
+      </p>
+      <TabelaIncidencia plano={v.plano} capacidade={capacidade} jornada={jornada} pendentes={pendentes} ocupado={confirmada.ocupado}
+        rotuloCapacidade={<>Com o tempo de estudo de {v.aluno.nome.split(" ")[0]}: <b>{fmtMin(capacidade)}</b> por semana</>}
+        aoAplicar={(ops, titulo) => confirmada.propor(ops, `${titulo} de ${v.aluno.nome}`)} />
+      <MensagemErro erro={confirmada.erro} />
+      {confirmada.dialogo}
+    </>
+  );
+}
+
 /* ---------- O edital de um aluno (visto pelo aluno ou pelo moderador) ---------- */
 
 const REMOCOES = ["removerTopico", "removerSubtopico", "removerMateria"];
@@ -731,9 +757,7 @@ export function EditalDoAluno({ v, modo }) {
       disponibilidade: true, ritmo: true, prazo: true, revisao: true, permissoes: true, limites: true, ordemMaterias: true }
     : { reordenar: !!perm.reordenar, cortar: !!perm.concluirItens, vistos: !!perm.concluirItens, recalcular: !!perm.recalcular,
       disponibilidade: !!perm.disponibilidade, ritmo: !!perm.ritmo, ordemMaterias: !!perm.ordemMaterias };
-  const modelos = useModelos(moderador);
-  const jornada = modelos?.find((m) => m.id === v.plano.modeloId);
-  const pendentes = new Set(v.itens.filter((it) => !v.estado(it).concluido).map((it) => it.materiaId));
+
 
   // tirar conteúdo e mexer na incidência passam pela prévia; ordem, inclusão e tempo vão direto (com log)
   const operar = (op, titulo) => (REMOCOES.includes(op.tipo) ? confirmada : direta).propor(op, titulo);
@@ -749,11 +773,6 @@ export function EditalDoAluno({ v, modo }) {
       </>} />
       <MensagemErro erro={acao.erro || direta.erro} />
 
-      {moderador && (
-        <TabelaIncidencia plano={v.plano} capacidade={capacidadeSemanal(v.plano.disponibilidade)} jornada={jornada} pendentes={pendentes} ocupado={ocupado}
-          rotuloCapacidade={<>Com o tempo deste aluno: <b>{fmtMin(capacidadeSemanal(v.plano.disponibilidade))}</b> por semana</>}
-          aoAplicar={(ops, titulo) => confirmada.propor(ops, titulo)} />
-      )}
 
       <section className="secao" aria-label="Matérias">
         {moderador && <h2 className="subtitulo secao-titulo">Conteúdo do edital</h2>}

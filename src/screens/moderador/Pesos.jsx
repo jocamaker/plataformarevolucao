@@ -1,12 +1,13 @@
-/* Matérias e pesos por vestibular: a matriz matérias × jornadas. Em cada
-   célula, se a matéria está ativa naquela jornada e o peso dela (1 a 3). As
-   edições ficam em rascunho e são aplicadas por jornada; com "levar aos
-   alunos", chegam também a quem está nela, sem desfazer o que foi ajustado
-   em cada aluno. O rodapé de cada jornada mostra a divisão da semana com a
-   carga de referência (o mesmo cálculo do motor, com o bloco mínimo). */
+/* Pesos iniciais por vestibular: a matriz matérias × jornadas. Em cada
+   célula, se a matéria está ativa naquela jornada e o peso inicial dela (1 a
+   3), que é o que o aluno NOVO da jornada recebe. O peso de quem já está na
+   jornada é individual e se ajusta em Alunos → aluno → Pesos; daqui, só a
+   matéria ativa pode ser levada aos alunos atuais. O rodapé de cada jornada
+   mostra a divisão da semana com a carga de referência. */
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Minus, Plus, RefreshCw, Scale } from "lucide-react";
+import { AlertTriangle, Minus, Plus, RefreshCw, Scale, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useApp } from "../../state/AppContext.jsx";
 import { useAcao, useModelos, useTodosPlanos } from "../../state/hooks.js";
 import { PESO_PADRAO, materiaPermitida, pesoDe, vestibularesDaMateria } from "../../core/plano.js";
@@ -51,7 +52,7 @@ function AcoesColuna({ modelo, ops, alunos, levar, aoLevar, aoAplicar, ocupado, 
   return (
     <div className="pesos-acoes">
       {alunos > 0 && (
-        <label className="checagem"><input type="checkbox" checked={levar} onChange={(e) => aoLevar(e.target.checked)} />Levar aos alunos desta jornada ({alunos})</label>
+        <label className="checagem"><input type="checkbox" checked={levar} onChange={(e) => aoLevar(e.target.checked)} />Levar a matéria ativa/inativa aos {alunos} {alunos === 1 ? "aluno" : "alunos"} (o peso deles não muda)</label>
       )}
       <span className="linha-acoes">
         <Botao variante="texto" tamanho="sm" onClick={aoDescartar}>Descartar</Botao>
@@ -91,7 +92,7 @@ export default function Pesos() {
     const propagar = levar[modelo.id] !== false && alunosDa(modelo.id) > 0;
     const r = await s.planos.alterarJornada(modelo.id, ops, { propagar });
     setRascunho((x) => { const { [modelo.id]: _feito, ...resto } = x; return resto; });
-    setRetorno(`${modelo.nome}: aplicado${propagar ? ` na jornada e em ${r.alunos} ${r.alunos === 1 ? "aluno" : "alunos"}` : ""}.`);
+    setRetorno(`${modelo.nome}: pesos iniciais salvos (valem para alunos novos)${propagar && r.alunos ? `; matérias ativas levadas a ${r.alunos} ${r.alunos === 1 ? "aluno" : "alunos"}` : ""}.`);
   });
   const atualizarTodos = () => executar(async () => {
     const r = await s.planos.migrarMotor({ todosAlunos: true });
@@ -122,8 +123,8 @@ export default function Pesos() {
 
   return (
     <>
-      <TituloPagina eyebrow="Motor de metas" frase="*Matérias e pesos* por vestibular"
-        texto="Só você define quais matérias entram em cada jornada e o peso de cada uma. O tempo da semana de cada aluno é repartido na proporção dos pesos (1 : 2 : 3), em blocos de 30 min."
+      <TituloPagina eyebrow="Motor de metas" frase="*Pesos iniciais* por vestibular"
+        texto="O peso que cada aluno NOVO recebe ao entrar na jornada, e as matérias ativas em cada vestibular. O peso de um aluno é individual: para mudar, abra Alunos, escolha o aluno e a aba Pesos."
         direita={<Botao variante="vidro" icone={RefreshCw} disabled={ocupado} onClick={atualizarTodos}>Atualizar motor de todos os alunos</Botao>} />
 
       <div className="pesos-topo">
@@ -142,6 +143,7 @@ export default function Pesos() {
         </div>
         <p className="previa-linha legenda-pesos"><b>1 · Baixa</b> menor frequência · <b>2 · Média</b> intermediária · <b>3 · Alta</b> maior frequência</p>
       </div>
+      <p className="aviso" role="note"><Users aria-hidden="true" />Para ajustar a dificuldade de um aluno específico, vá em <Link to="/moderador/alunos"><b>Alunos</b></Link>, abra o aluno e use a aba <b>Pesos</b>. Mudar o peso aqui não altera nenhum aluno atual.</p>
       <MensagemErro erro={erro} />
       {retorno && !erro && <p className="retorno-curto" role="status">{retorno}</p>}
 

@@ -201,7 +201,10 @@ export default function Alunos() {
               {visiveis.map(({ aluno: a, m }) => (
                 <tr key={a.id}>
                   <td><Link to={a.id} className="link-aluno"><strong>{a.nome}</strong><small>{a.turma || a.email}</small></Link></td>
-                  <td>{ind.nomeVestibular(a.vestibularId)}{a.cursoId && <small className="bloco-pequeno">{ind.nomeCurso(a.cursoId)}</small>}</td>
+                  <td>
+                    {ind.nomeVestibular(a.vestibularId)}{a.cursoId && <small className="bloco-pequeno">{ind.nomeCurso(a.cursoId)}</small>}
+                    <Link to={`${a.id}?aba=pesos`} className="link-pesos" aria-label={`Pesos das matérias de ${a.nome}`}>Pesos</Link>
+                  </td>
                   <td className="celula-progresso">{m.planoPct != null ? <><Barra valor={m.planoPct} /><small className="num">{String(m.planoPct).replace(".", ",")}%{m.fimPrevisto ? ` · até ${fmtDataCurta(m.fimPrevisto)}` : ""}</small></> : <small>sem edital</small>}</td>
                   <td className={`num${m.atrasados ? " txt-erro" : ""}`}>{m.atrasados ? `${m.atrasados} · ${m.maxDiasAtraso}d` : "—"}</td>
                   <td className="num">

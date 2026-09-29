@@ -21,7 +21,7 @@ export function useVisaoAluno(alunoId, { semana: comSemana = true } = {}) {
   const progresso = useProgresso(alunoId);
   // plano antigo: convertido em memória para o motor de blocos (a gravação é do moderador)
   const plano = useMemo(() => (planoBruto && ind ? planoParaMotor(planoBruto, ind, progresso || {}) : planoBruto), [planoBruto, ind, progresso]);
-  const { semana, hoje } = useSemana(comSemana ? alunoId : null);
+  const { semana, hoje, erro: erroSemana } = useSemana(comSemana ? alunoId : null);
   const revisoes = useRevisoes(alunoId);
   const sessoes = useSessoes(alunoId);
   const questoes = useQuestoes(alunoId);
@@ -64,5 +64,5 @@ export function useVisaoAluno(alunoId, { semana: comSemana = true } = {}) {
     };
   }, [carregando, hoje, plano, progresso, semana, revisoes, sessoes, questoes, simulados, ind]);
 
-  return { carregando, aluno, plano, planoBruto, progresso: progresso || {}, semanaDoc: semana, revisoes, sessoes, questoes, simulados, resumosSemana, hoje, ind, ...(derivado || {}) };
+  return { carregando, erroSemana, aluno, plano, planoBruto, progresso: progresso || {}, semanaDoc: semana, revisoes, sessoes, questoes, simulados, resumosSemana, hoje, ind, ...(derivado || {}) };
 }

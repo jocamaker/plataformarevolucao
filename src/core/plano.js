@@ -68,6 +68,8 @@ export const MODALIDADES = [
 
 export const REVISAO_PADRAO = { intervalos: [7, 15, 30] };
 // tempo de estudo por dia que o aluno pode escolher (só o moderador muda)
+// versão do motor de metas gravada nos planos, jornadas e semanas (ver migracao.js)
+export const MOTOR_VERSAO = 3;
 export const LIMITES_PADRAO = { minDia: 0, maxDia: 960 }; // até 16 h por dia
 
 /* Matérias que só existem para alguns vestibulares (o documento da matéria
@@ -393,7 +395,7 @@ export const pesoDaMateria = (plano, materiaId) => pesoDe((plano?.materias || []
 export function modeloVazio() {
   return {
     nome: "", descricao: "", vestibularId: "", cursoId: "", modalidade: "extensivo", periodo: "", versao: 1, dataAlvo: null,
-    ritmo: 1, revisao: { ...REVISAO_PADRAO }, limitesTempo: { ...LIMITES_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [], motorVersao: 3,
+    ritmo: 1, revisao: { ...REVISAO_PADRAO }, limitesTempo: { ...LIMITES_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [], motorVersao: MOTOR_VERSAO,
   };
 }
 
@@ -417,7 +419,7 @@ export function planoDoModelo(modelo, aluno, { hojeIso, disponibilidade } = {}) 
     permissoesAluno: { ...PERMISSOES_PADRAO, ...(modelo.permissoesAluno || {}) },
     materias: structuredClone(modelo.materias || []),
     ordemMaterias: [],
-    motorVersao: 3,
+    motorVersao: MOTOR_VERSAO,
     alocacaoSemanal: {},
     cronograma: {},
     fimPrevisto: null,

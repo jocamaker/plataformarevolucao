@@ -61,7 +61,10 @@ describe("semana", () => {
     expect(r.pendentes.every((m) => m.origem === "sem espaço na semana" && m.minutos % 30 === 0)).toBe(true);
     expect(agendado).toBeLessThanOrEqual(120 + 120 + 180 + 60);
     expect(todas(r).every((m) => m.minutos % 30 === 0)).toBe(true);
-    expect(r.metas.seg).toEqual(est.metas.seg); // dias passados ficam como estão
+    // dias que já passaram: ficam só as metas feitas e as revisões; as de estudo abertas foram replanejadas
+    ["seg", "ter", "qua"].forEach((k) => expect(r.metas[k]).toEqual(est.metas[k].filter((m) => m.done || m.tipo === "revisao")));
+    const atrasadas = ["seg", "ter", "qua"].flatMap((k) => est.metas[k]).filter((m) => !m.done);
+    expect(previa.resumo.qtdPendencias).toBe(1 + atrasadas.length);
   });
 
   it("revisões: entram no dia certo, saem quando deixam de estar agendadas e as vencidas aparecem como atrasadas", () => {

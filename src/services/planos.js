@@ -96,14 +96,20 @@ export function opsCancelarRevisoes(revisoes, itemId, { soIds } = {}) {
 /* Versão de uma alteração da jornada para o plano de um aluno (null = não levar). */
 const PADRAO_MATERIA = { peso: PESO_PADRAO, maxSessao: MAX_SESSAO_PADRAO, ritmo: 1, ativa: true };
 const valorMateria = (m, k) => (k === "ativa" ? m?.ativa !== false : k === "peso" ? pesoDe(m) : m?.[k] ?? PADRAO_MATERIA[k] ?? null);
+/* O peso é individual: a jornada guarda o peso inicial (o que o aluno novo
+   recebe), e mudá-lo na jornada nunca mexe no peso de quem já está nela; o
+   peso de cada aluno se ajusta no painel dele. */
+export const CAMPOS_SO_DA_JORNADA = ["peso"];
 export function opParaAluno(op, modeloAntes, plano) {
   if (["moverMateria", "moverTopico", "moverSubtopico"].includes(op.tipo)) return null;
+  if (op.tipo === "adicionarMateria") { const { peso: _p, ...resto } = op; return resto; }
   const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   if (op.tipo === "definirMateria") {
     const naJornada = modeloAntes.materias?.find((m) => m.materiaId === op.materiaId);
     const noAluno = plano.materias?.find((m) => m.materiaId === op.materiaId);
     if (!noAluno) return null;
-    const campos = Object.fromEntries(Object.entries(op.campos || {}).filter(([k]) => igual(valorMateria(noAluno, k), valorMateria(naJornada, k))));
+    const campos = Object.fromEntries(Object.entries(op.campos || {})
+      .filter(([k]) => !CAMPOS_SO_DA_JORNADA.includes(k) && igual(valorMateria(noAluno, k), valorMateria(naJornada, k))));
     return Object.keys(campos).length ? { ...op, campos } : null;
   }
   if (op.tipo === "definirPlano") {

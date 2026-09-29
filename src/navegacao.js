@@ -28,7 +28,7 @@ export const MENU_MODERADOR = {
   topo: [
     { k: "alunos", label: "Alunos", icone: Users },
     { k: "jornadas", label: "Jornadas", icone: Mapa },
-    { k: "pesos", label: "Pesos", icone: Scale },
+    { k: "pesos", label: "Pesos iniciais", icone: Scale },
     { k: "materiais", label: "Materiais", icone: Library },
     { k: "simulados", label: "Simulados", icone: FileText },
     { k: "cursos", label: "Aulas em vídeo", icone: PlayCircle },

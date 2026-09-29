@@ -16,6 +16,7 @@ import { DIAS, dataParaDiaSemana } from "./nucleo.js";
 import { fmtDataCurta, inicioDaSemana, somarDias } from "./datas.js";
 import { BLOCO_MIN, arredBloco, paraBlocos } from "./blocos.js";
 import { ordenarDia, planejarSemana, rankDaOrdem } from "./motor.js";
+import { MOTOR_VERSAO } from "./migracao.js";
 
 export const idxDia = (k) => DIAS.findIndex((d) => d.k === k);
 export const chaveDoDia = (iso) => dataParaDiaSemana(iso);
@@ -73,7 +74,7 @@ export function gerarSemanaNova(ctx, chave) {
   });
   const metas = vazia();
   DIAS.forEach((d) => { metas[d.k] = dias[d.k].map((m) => limpa(comConteudo(ctx, m))); });
-  return { chave, metas, pendentes: [], editada: false, geracao: 0, motorVersao: 3, semTempo: resumo.materiasSemTempo };
+  return { chave, metas, pendentes: [], editada: false, geracao: 0, motorVersao: MOTOR_VERSAO, semTempo: resumo.materiasSemTempo };
 }
 
 /* Semana válida para hoje. Na virada, o que ficou por fazer da semana que
@@ -246,7 +247,7 @@ export function reordenarNoDia(est, k, id, passo) {
 /* Base comum da reorganização e do replanejamento: o que fica (dias que já
    passaram, metas feitas e revisões), quanto de cada matéria já foi usado na
    semana, e o espaço que sobra de hoje em diante. */
-function baseDaReorganizacao(est, ctx, hojeIso) {
+function baseDaReorganizacao(est, ctx, hojeIso, { levarAtrasadas = false } = {}) {
   const h = idxDia(chaveDoDia(hojeIso));
   const passada = hojeIso > somarDias(est.chave, 6);
   const datas = datasDaSemana(est.chave);
@@ -254,9 +255,18 @@ function baseDaReorganizacao(est, ctx, hojeIso) {
   const metas = vazia();
   const usado = {}, ocupado = {}, capacidade = {}, capacidadeCota = {}, revisoesCota = {};
   const comRevisao = new Set();
+  const atrasadas = [];
   DIAS.forEach((d, i) => {
     const antes = passada || i < h;
-    const manter = (est.metas[d.k] || []).filter((m) => antes || m.done || m.tipo === "revisao").map((m) => ({ ...m }));
+    // no replanejamento, a meta de estudo aberta de um dia que já passou sai
+    // dele e vira pendência (continua contando na cota da semana, abaixo)
+    if (levarAtrasadas && antes && !passada) {
+      (est.metas[d.k] || []).filter((m) => !m.done && m.tipo !== "revisao").forEach((m) => {
+        atrasadas.push(m);
+        usado[m.materiaId] = (usado[m.materiaId] || 0) + paraBlocos(m.minutos);
+      });
+    }
+    const manter = (est.metas[d.k] || []).filter((m) => (antes && !(levarAtrasadas && !passada && !m.done && m.tipo !== "revisao")) || m.done || m.tipo === "revisao").map((m) => ({ ...m }));
     metas[d.k] = manter;
     manter.forEach((m) => {
       if (m.tipo === "revisao") {
@@ -268,7 +278,7 @@ function baseDaReorganizacao(est, ctx, hojeIso) {
     capacidadeCota[d.k] = foraDoPlano(d.k) ? 0 : Number(ctx.disp?.[d.k]) || 0;
     capacidade[d.k] = antes ? 0 : capacidadeCota[d.k];
   });
-  return { h, passada, metas, entrada: { materias: ctx.materias || [], capacidade, capacidadeCota, revisoesCota, comRevisao, ocupado, usado, ordemMaterias: ctx.ordemMaterias } };
+  return { h, passada, metas, atrasadas, entrada: { materias: ctx.materias || [], capacidade, capacidadeCota, revisoesCota, comRevisao, ocupado, usado, ordemMaterias: ctx.ordemMaterias } };
 }
 
 function juntar(base, dias, ctx, prefixo) {
@@ -291,7 +301,7 @@ export function reorganizarSemana(est, ctx, hojeIso) {
   const { dias, resumo } = planejarSemana({ ...base.entrada, prefixo: "" });
   const metas = juntar(base, dias, ctx, `${est.chave}:g${geracao}:`);
   DIAS.forEach((d) => { metas[d.k] = metas[d.k].map(({ replanejada: _r, ...m }) => m); });
-  return { ...est, metas, editada: false, geracao, motorVersao: 3, semTempo: resumo.materiasSemTempo };
+  return { ...est, metas, editada: false, geracao, motorVersao: MOTOR_VERSAO, semTempo: resumo.materiasSemTempo };
 }
 
 /* "Preciso de mais tempo": sessão extra no dia seguinte com mais folga (no
@@ -308,13 +318,15 @@ export function adicionarTempoExtra(est, ctx, { materiaId, topicoId, subtopicoId
   return destino;
 }
 
-/* Replanejamento: as pendências de semanas anteriores entram primeiro no que
-   resta da semana, e depois o que falta da cota de cada matéria. */
+/* Replanejamento: as metas atrasadas (as de estudo, abertas, dos dias desta
+   semana que já passaram, e as pendências de semanas anteriores) entram
+   primeiro no que resta da semana, de hoje em diante; depois, o que falta da
+   cota de cada matéria. O que não couber volta como pendência. */
 export function previaReplanejamento(est, ctx, hojeIso) {
-  const pendentes = (est.pendentes || []).filter((m) => !m.done);
+  const base = baseDaReorganizacao(est, ctx, hojeIso, { levarAtrasadas: true });
+  const pendentes = [...(est.pendentes || []).filter((m) => !m.done), ...base.atrasadas];
   const pendencias = {};
   pendentes.forEach((m) => { pendencias[m.materiaId] = (pendencias[m.materiaId] || 0) + Math.max(1, Math.ceil((m.minutos || 0) / BLOCO_MIN)); });
-  const base = baseDaReorganizacao(est, ctx, hojeIso);
   const { dias, resumo } = planejarSemana({ ...base.entrada, pendencias, prefixo: "" });
   DIAS.forEach((d) => dias[d.k].forEach((m) => { if (m.tipo === "ciclo") m.replanejada = true; }));
   const geracao = (est.geracao || 0) + 1;
@@ -340,7 +352,7 @@ export function aplicarReplanejamento(est, { semana, resumo }, hojeIso) {
     topicoId: null, subtopicoId: null, itemId: null, origem: "sem espaço na semana",
   }));
   const feitasHoje = (est.pendentes || []).filter((m) => m.done && m.feitoEm === hojeIso);
-  return { ...est, metas, pendentes: [...feitasHoje, ...sobras], editada: false, geracao, motorVersao: 2 };
+  return { ...est, metas, pendentes: [...feitasHoje, ...sobras], editada: false, geracao, motorVersao: MOTOR_VERSAO };
 }
 
 /* Conteúdo mostrado numa meta: a aberta segue o progresso; a feita e a

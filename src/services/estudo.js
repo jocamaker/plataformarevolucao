@@ -16,7 +16,7 @@ import { BLOCO_MIN, TEMPO_EXTRA, arredBloco, arredMeta } from "../core/blocos.js
 import {
   conteudoDaVez, distribuirMinutos, duracaoRevisao, estadoItem, itensDoPlano, materiasDoMotor, pesoDaMateria,
 } from "../core/plano.js";
-import { planoParaMotor } from "../core/migracao.js";
+import { MOTOR_VERSAO, planoParaMotor } from "../core/migracao.js";
 import {
   acharMeta, adicionarTempoExtra, aplicarReplanejamento, lerIdRevisaoAvulsa, marcarMeta, moverMeta,
   previaReplanejamento, reordenarNoDia, reorganizarSemana, revisoesAtrasadas, semanaVigente, sincronizarRevisoes,
@@ -51,16 +51,16 @@ export function servicoEstudo(ctx) {
 
   const semId = (doc) => { if (!doc) return null; const { id: _i, alunoId: _a, atualizadaEm: _t, ...est } = doc; return est; };
 
-  /* Semana gravada por um motor anterior (sem motorVersao 3): as metas
+  /* Semana gravada por um motor anterior (motorVersao diferente da atual): as metas
      abertas vão para durações válidas (estudo de 60 a 180 min, revisão de
      30 em 30), inclusive as de dias que já passaram e as pendências, e os
      dias de hoje em diante são refeitos uma vez (reorganizarSemana). Metas
      feitas e sessões ficam como estão: são histórico. */
   function semanaNoMotorAtual(est, c, hoje) {
-    if (!est || est.motorVersao === 3) return est;
+    if (!est || est.motorVersao === MOTOR_VERSAO) return est;
     const valida = (m) => (m.done ? m : { ...m, minutos: m.tipo === "revisao" ? Math.max(BLOCO_MIN, arredBloco(m.minutos)) : arredMeta(m.minutos) });
     const metas = Object.fromEntries(DIAS.map((d) => [d.k, (est.metas?.[d.k] || []).map(valida)]));
-    return reorganizarSemana({ ...est, metas, pendentes: (est.pendentes || []).map(valida), motorVersao: 3 }, c.motor, hoje);
+    return reorganizarSemana({ ...est, metas, pendentes: (est.pendentes || []).map(valida), motorVersao: MOTOR_VERSAO }, c.motor, hoje);
   }
 
   // semana válida hoje (+ revisões em dia) e as operações para gravá-la
@@ -74,6 +74,15 @@ export function servicoEstudo(ctx) {
     if (mudou || sinc !== est || convertida !== antiga) ops.push(opSemana(alunoId, sinc));
     if (resumo) ops.push({ tipo: "definir", colecao: "resumosSemana", id: `${alunoId}_${resumo.semana}`, dados: { ...resumo, alunoId, criadoEm: carimbo() } });
     return { est: sinc, ops };
+  }
+
+  /* A tela mostra a semana gravada; o serviço, a semana válida agora. Se a
+     meta pedida não está na válida (a gravada ficou para trás: virada de
+     semana, motor novo, outra aba), grava a válida para a tela se atualizar
+     e pede para repetir, em vez de só recusar. */
+  async function semanaDesatualizada(alunoId, est, ops) {
+    await repo.lote([...ops.filter((o) => o.colecao !== "semanas"), opSemana(alunoId, est)]);
+    throw new ErroDados("A sua semana foi atualizada agora. Tente de novo.", "semana-atualizada");
   }
 
   const opSemana = (alunoId, est) => ({ tipo: "definir", colecao: "semanas", id: alunoId, dados: { ...est, alunoId, atualizadaEm: carimbo() } });
@@ -227,7 +236,7 @@ export function servicoEstudo(ctx) {
       const meta = avulsa
         ? revisoesAtrasadas(c.revisoes, ctx.hoje(), est, c.motor.duracaoRevisao).find((m) => m.id === metaId)
         : acharMeta(est, metaId)?.meta;
-      if (!meta) throw new ErroDados("Meta não encontrada. A semana pode ter virado; recarregue.", "nao-encontrado");
+      if (!meta) return semanaDesatualizada(alunoId, est, ops);
       return meta.done ? desfazerMeta(alunoId, c, est, meta, ops) : concluirMeta(alunoId, c, est, meta, ops);
     },
 
@@ -320,11 +329,12 @@ export function servicoEstudo(ctx) {
       const c = await contexto(alunoId);
       if (!c.plano) throw new ErroDados("Sem plano de estudos.", "sem-plano");
       ctx.exigir("alterar:plano", { alunoId, plano: c.plano, permissao: "moverMetas" });
-      const { est: vig } = vigente(c, alunoId);
+      const { est: vig, ops: opsVigente } = vigente(c, alunoId);
+      if (!acharMeta(vig, metaId)) return semanaDesatualizada(alunoId, vig, opsVigente);
       const est = structuredClone(vig);
       const r = moverMeta(est, metaId, para, ctx.hoje());
       if (!r.ok) throw new ErroValidacao({ dia: r.motivo });
-      const ops = [opSemana(alunoId, est)];
+      const ops = [...opsVigente.filter((o) => o.colecao !== "semanas"), opSemana(alunoId, est)];
       if (r.revisao) {
         const rev = c.revisoes.find((x) => x.id === r.revisao.revisaoId);
         if (rev) {
@@ -342,7 +352,8 @@ export function servicoEstudo(ctx) {
       const c = await contexto(alunoId);
       if (!c.plano) throw new ErroDados("Sem plano de estudos.", "sem-plano");
       ctx.exigir("alterar:plano", { alunoId, plano: c.plano, permissao: "ordemMaterias" });
-      const { est: vig } = vigente(c, alunoId);
+      const { est: vig, ops: opsVigente } = vigente(c, alunoId);
+      if (!acharMeta(vig, metaId)) return semanaDesatualizada(alunoId, vig, opsVigente);
       const est = structuredClone(vig);
       if (!DIAS.some((d) => d.k === dia) || !reordenarNoDia(est, dia, metaId, passo)) return false;
       await repo.lote([opSemana(alunoId, est)]);

@@ -15,9 +15,9 @@
 
 import { DIAS } from "./nucleo.js";
 import { BLOCO_MIN, DURACOES_META, arredBloco, arredMaxSessao } from "./blocos.js";
-import { LIMITES_PADRAO, PERMISSOES_PADRAO, minimoSemanal, pesoValido } from "./plano.js";
+import { LIMITES_PADRAO, MOTOR_VERSAO, PERMISSOES_PADRAO, minimoSemanal, pesoValido } from "./plano.js";
 
-export const MOTOR_VERSAO = 3;
+export { MOTOR_VERSAO };
 const LIMITE_ANTIGO = 480; // máximo por dia do motor v2
 
 export function pesoPelaIncidencia(minutos, maior) {

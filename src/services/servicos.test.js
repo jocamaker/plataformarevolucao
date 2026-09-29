@@ -404,7 +404,7 @@ describe("jornadas práticas e edital por aluno", () => {
     expect((await t.repo.obter("planos", ana)).materias.find((m) => m.materiaId === "historia").ativa).toBe(false);
   });
 
-  it("levar a mudança da jornada aos alunos mantém o ajuste individual de cada um", async () => {
+  it("levar a mudança da jornada aos alunos mantém o ajuste individual de cada um e nunca leva o peso", async () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("moderador@curso.com");
     const jornada = await t.repo.obter("modelosPlano", "modelo-fuvest");
@@ -425,7 +425,8 @@ describe("jornadas práticas e edital por aluno", () => {
     const m = (p, id) => p.materias.find((x) => x.materiaId === id);
     expect(m(modelo, "biologia").peso).toBe(daJornada);
     expect(m(plano, "biologia").peso).toBe(daAna); // ajuste da Ana fica
-    expect(m(plano, "historia")).toMatchObject({ peso: outro(pj("historia")), maxSessao: 90, ativa: false });
+    // o peso é individual: nunca vai da jornada para o aluno; duração e ativa vão
+    expect(m(plano, "historia")).toMatchObject({ peso: pj("historia"), maxSessao: 90, ativa: false });
     expect(m(modelo, "geografia").topicos[0].topicoId).toBe("g2");
     expect(m(plano, "geografia").topicos[0].topicoId).toBe("g1"); // ordem fica só na jornada
     const logs = await t.repo.listar("logs", [["alunoId", "==", ana], ["motivo", "==", "Levado pela jornada"]]);
@@ -747,5 +748,51 @@ describe("migração para o motor de blocos e pesos", () => {
     expect(logs.map((l) => l.entidade).sort()).toEqual(["modelo", "plano"]);
     expect(await t.s.planos.migrarMotor({ todosAlunos: true })).toEqual({ modelos: 0, alunos: 0 });
     expect(await t.repo.listar("logs", [["tipo", "==", "migrarMotor"]])).toHaveLength(2);
+  });
+});
+
+describe("peso individual e semana desatualizada", () => {
+  it("mudar o peso de uma aluna não muda a jornada nem os outros alunos", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    const carlos = await t.uidDe("carlos@curso.com");
+    await t.entrar("moderador@curso.com");
+    const jornadaAntes = await t.repo.obter("modelosPlano", "modelo-fuvest");
+    const carlosAntes = await t.repo.obter("planos", carlos);
+    const atual = pesoDe((await t.repo.obter("planos", ana)).materias.find((m) => m.materiaId === "fisica"));
+    await t.s.planos.alterar(ana, { tipo: "definirMateria", materiaId: "fisica", campos: { peso: atual === 3 ? 1 : 3 } });
+    expect(pesoDe((await t.repo.obter("planos", ana)).materias.find((m) => m.materiaId === "fisica"))).toBe(atual === 3 ? 1 : 3);
+    expect((await t.repo.obter("modelosPlano", "modelo-fuvest")).materias).toEqual(jornadaAntes.materias);
+    expect((await t.repo.obter("planos", carlos)).materias).toEqual(carlosAntes.materias);
+  });
+
+  it("mover uma meta de uma semana que ficou para trás grava a semana atual e pede para repetir", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    const est = await t.s.estudo.garantirSemana(ana);
+    const velha = { ...est, motorVersao: 2, alunoId: ana }; // gravada por um motor anterior
+    await t.repo.lote([{ tipo: "definir", colecao: "semanas", id: ana, dados: JSON.parse(JSON.stringify(velha)) }]);
+    const meta = velha.metas.sab.find((m) => !m.done);
+    await expect(t.s.estudo.moverMeta(ana, `${meta.id}-que-sumiu`, "qui")).rejects.toThrow(/atualizada/);
+    const gravada = await t.repo.obter("semanas", ana);
+    expect(gravada.motorVersao).toBe(3); // a tela passa a ver a semana válida
+    const outra = gravada.metas.sab.find((m) => !m.done);
+    await expect(t.s.estudo.moverMeta(ana, outra.id, "qui")).resolves.toBe(true);
+  });
+});
+
+describe("replanejar e depois mover", () => {
+  it("as metas atrasadas vão para os próximos dias e mover continua funcionando", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    const seg = await t.s.estudo.garantirSemana(ana);
+    agora = new Date(2026, 8, 30, 10, 0); // quarta: segunda e terça ficaram atrasadas
+    const atrasadas = [...seg.metas.seg, ...seg.metas.ter].filter((m) => !m.done && m.tipo === "ciclo");
+    expect(atrasadas.length).toBeGreaterThan(0);
+    const previa = await t.s.estudo.previaReplanejamento(ana);
+    const est = await t.s.estudo.aplicarReplanejamento(ana, previa);
+    expect([...est.metas.seg, ...est.metas.ter].filter((m) => !m.done && m.tipo === "ciclo")).toEqual([]);
+    expect(est.motorVersao).toBe(3);
+    const m = est.metas.sab.find((x) => !x.done);
+    await expect(t.s.estudo.moverMeta(ana, m.id, "qui")).resolves.toBe(true);
   });
 });

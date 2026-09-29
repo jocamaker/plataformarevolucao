@@ -13,7 +13,9 @@ React 19 + Vite. Dois papéis, **aluno** e **moderador**, sobre dados reais.
 - **Moderador**: quase tudo fica dentro de cada aluno (edital com pesos,
   matérias ativas só para ele, redações, registros, histórico).
   No geral: Jornadas (o conteúdo programático de cada vestibular/curso),
-  Pesos (a matriz matérias × jornadas com matéria ativa e peso de 1 a 3),
+  Pesos iniciais (a matriz matérias × jornadas com matéria ativa e o peso que
+  o aluno novo recebe; o peso de cada aluno se ajusta na aba Pesos do painel
+  dele),
   Materiais (cria as áreas, com um clique cria uma por matéria, e anexa as
   listas dentro delas), Simulados (anexa o PDF de cada prova; a capa sai
   sozinha do alto da primeira página, com pdf.js, ou de uma imagem enviada)
@@ -29,7 +31,7 @@ React 19 + Vite. Dois papéis, **aluno** e **moderador**, sobre dados reais.
 ```bash
 npm install
 npm run dev               # http://localhost:5173
-npm test                  # núcleo, motor, serviços, adaptador local e flashcards (231)
+npm test                  # núcleo, motor, serviços, adaptador local e flashcards (234)
 npm run test:emuladores   # regras de segurança e fluxo completo no Firebase emulado
 npm run build             # gera o site em docs/ (é o que o GitHub Pages publica)
 ```
@@ -145,8 +147,12 @@ O sistema gera sozinho as metas de cada aluno (`src/core/motor.js`, com
 
 | Quem | O quê |
 |---|---|
-| **Moderador** | matérias ativas, peso, duração máxima da meta, velocidade da matéria, limites do tempo por dia (`limitesTempo`), intervalos das revisões e as permissões do aluno |
+| **Moderador** | matérias ativas, peso (individual: aba Pesos de cada aluno; a jornada guarda só o peso inicial, e mudá-lo nela não altera quem já está nela), duração máxima da meta, velocidade da matéria, limites do tempo por dia (`limitesTempo`), intervalos das revisões e as permissões do aluno |
 | **Aluno** (cada item é uma permissão, ligada por padrão) | tempo de estudo de cada dia (`disponibilidade`, de 30 em 30 dentro dos limites e com o mínimo semanal de 30 min por matéria com conteúdo); dia de cada meta dentro da semana atual, de hoje em diante (`moverMetas`: arrastar com o mouse ou tocar na meta e depois no dia); ordem das matérias no dia e das metas de um dia (`ordemMaterias`); "preciso de mais tempo" de 60, 90 ou 120 min |
+
+**Replanejar** leva as metas de estudo atrasadas (dos dias que já passaram
+nesta semana e as pendências de semanas anteriores) para os dias de hoje em
+diante, antes do resto da cota; o que não couber vira pendência.
 
 Nada do que o aluno ajusta avisa o moderador. Mudar o tempo grava log; mover
 metas, não.

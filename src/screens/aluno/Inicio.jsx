@@ -126,7 +126,7 @@ function Replanejar({ aberto, fechar, alunoId, disp }) {
         {previa && (
           <>
             <p className="texto-dialogo">
-              O resto da semana é <strong>recalculado a partir do seu plano</strong>. As pendências entram primeiro, sempre dentro do seu tempo de estudo de cada dia e em blocos de 30 min.
+              O resto da semana é <strong>recalculado a partir do seu plano</strong>. As metas atrasadas (dos dias que já passaram e de semanas anteriores) entram primeiro, de hoje em diante, sempre dentro do seu tempo de estudo de cada dia.
               O que você já concluiu fica como está.
             </p>
             <div className="replan-resumo">

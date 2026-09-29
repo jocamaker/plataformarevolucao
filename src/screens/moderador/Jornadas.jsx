@@ -220,7 +220,7 @@ export function Jornada() {
           <input type="checkbox" checked={propagar} onChange={(e) => setPropagar(e.target.checked)} />
           <span>
             <b>Levar as mudanças também aos {alunos} {alunos === 1 ? "aluno" : "alunos"} desta jornada</b>
-            <small>O que você ajustou no painel de cada aluno continua como está; mudanças de ordem ficam só na jornada.</small>
+            <small>O que você ajustou no painel de cada aluno continua como está; mudanças de ordem e de peso ficam só na jornada (o peso de cada aluno se ajusta em Alunos → aluno → Pesos).</small>
           </span>
         </label>
       )}
