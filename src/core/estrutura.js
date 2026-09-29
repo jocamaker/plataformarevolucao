@@ -52,7 +52,8 @@ export function indiceEstrutura({ areas = [], materias = [], topicos = [], subto
 
 const slug = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-/* As 9 matérias do curso, na ordem da grade. As cores só identificam a
+/* As matérias do curso, na ordem da grade (Obras literárias é o bloco das
+   leituras obrigatórias, à parte de Linguagens). As cores só identificam a
    matéria (bolinha e bloco); o moderador pode trocar. */
 export const MATERIAS_DO_CURSO = [
   { id: "biologia", nome: "Biologia", cor: "#5AA555" },
@@ -60,6 +61,7 @@ export const MATERIAS_DO_CURSO = [
   { id: "quimica", nome: "Química", cor: "#3FA99B" },
   { id: "matematica", nome: "Matemática", cor: "#CC5A8A" },
   { id: "linguagens", nome: "Linguagens", cor: "#8A8FD6" },
+  { id: "obras-literarias", nome: "Obras literárias", cor: "#9A7432" },
   { id: "filosofia", nome: "Filosofia", cor: "#C9A13A" },
   { id: "sociologia", nome: "Sociologia", cor: "#C9793A" },
   { id: "geografia", nome: "Geografia", cor: "#7FA36B" },
@@ -84,6 +86,9 @@ export function estruturaInicial() {
   };
   AREAS.forEach((a) => a.materias.forEach((m) => m.topicos.forEach((t) => addTopico(materiaDoCurso(m.id), t.id, t.nome, t.carga, t.subs))));
   addTopico("geografia", "g2", "Geografia agrária", 180, ["Técnicas e cultivo", "Estrutura fundiária", "Agronegócio e agricultura familiar"]);
+  // a lista oficial de leituras muda a cada edição: o moderador cadastra as obras
+  addTopico("obras-literarias", "ol1", "Obra 1 (exemplo)", 180, []);
+  addTopico("obras-literarias", "ol2", "Obra 2 (exemplo)", 180, []);
   const vestibulares = VESTIBULARES.map((v, i) => ({ id: v.id, nome: v.nome, cor: v.cor, ordem: i }));
   const cursos = [
     { id: "medicina", nome: "Medicina", ordem: 0 },

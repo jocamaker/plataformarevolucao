@@ -10,26 +10,27 @@ React 19 + Vite. Dois papéis, **aluno** e **moderador**, sobre dados reais.
   número de questões, e "Registrar acertos" já vem preenchido. Simulados
   mostra a galeria de provas (capa do caderno em cima, nome embaixo): abrir
   o PDF, resolver e registrar o resultado ligado à prova.
-- **Moderador**: quase tudo fica dentro de cada aluno (edital com incidência,
-  metas e matérias visíveis só para ele, redações, registros, histórico).
+- **Moderador**: quase tudo fica dentro de cada aluno (edital com pesos,
+  matérias ativas só para ele, redações, registros, histórico).
   No geral: Jornadas (o conteúdo programático de cada vestibular/curso),
+  Pesos (a matriz matérias × jornadas com matéria ativa e peso de 1 a 3),
   Materiais (cria as áreas, com um clique cria uma por matéria, e anexa as
   listas dentro delas), Simulados (anexa o PDF de cada prova; a capa sai
   sozinha do alto da primeira página, com pdf.js, ou de uma imagem enviada)
   e Aulas em vídeo, tudo filtrável por programa.
 - **Entrada**: login num cartão branco sobre ondas lisas e paradas em SVG
-  (azul, anil e um toque de água; `assets/fundo-ondas.svg` e `fundo-fios.svg`); quem
+  (azul-marinho com um brilho dourado; `assets/fundo-ondas.svg` e `fundo-fios.svg`); quem
   entra vai direto para o Dashboard (aluno) ou para Alunos (moderador). A
   frase, o texto e a foto do professor do lado direito se editam em Textos.
-  Uma fonte só (Inter); tema claro por padrão, com o escuro no botão de tema.
+  Tema claro por padrão, com o escuro no botão de tema.
 
 ## Rodar
 
 ```bash
 npm install
 npm run dev               # http://localhost:5173
-npm test                  # testes de núcleo, serviços e adaptador local (98)
-npm run test:emuladores   # regras de segurança e fluxo completo no Firebase emulado (23)
+npm test                  # núcleo, motor, serviços, adaptador local e flashcards (227)
+npm run test:emuladores   # regras de segurança e fluxo completo no Firebase emulado
 npm run build             # gera o site em docs/ (é o que o GitHub Pages publica)
 ```
 
@@ -44,8 +45,11 @@ na JVM). Se o ambiente definir `JAVA_TOOL_OPTIONS`, rode com
 | **Local (demonstração)** | sem as variáveis `VITE_FIREBASE_*` | `localStorage` (dados) e IndexedDB (arquivos) deste navegador |
 | **Firebase** | com as variáveis `VITE_FIREBASE_*` no build | Authentication, Firestore e Storage do seu projeto |
 
-No modo local, a primeira carga instala uma demonstração: as 9 matérias do
-curso com tópicos de exemplo, 7 jornadas (uma por vestibular), o moderador e
+No modo local, a primeira carga instala uma demonstração: as 10 matérias do
+curso com tópicos de exemplo (Obras literárias com "Obra 1 (exemplo)" e "Obra
+2 (exemplo)": a lista oficial muda a cada edição e quem cadastra é o
+moderador), 7 jornadas (uma por vestibular, com pesos tirados dos ciclos do
+núcleo; Obras literárias ativa só na FUVEST), o moderador e
 3 alunos com a jornada aplicada. **Nenhum histórico é inventado**: questões, simulados,
 estudo, redações e avisos começam vazios. Contas (senha `123456`):
 `moderador@curso.com`, `aluno@curso.com` (FUVEST · Medicina),
@@ -103,6 +107,49 @@ Qualquer pessoa pode criar uma conta pela API do Firebase Auth, mas sem
 documento em `usuarios/{uid}` ela não lê nem grava nada. Se quiser, restrinja
 cadastros públicos no Google Cloud (Identity Platform).
 
+## Motor de metas (blocos de 30 min e pesos)
+
+O sistema gera sozinho as metas de cada aluno (`src/core/motor.js`, com
+`blocos.js` e `plano.js`):
+
+- **Bloco de 30 min** (`BLOCO_MIN`): toda meta (de estudo, de revisão, tempo
+  extra, replanejada ou pendente) e todo tempo de estudo do dia são múltiplos
+  de 30. A carga dos tópicos e o progresso continuam em minutos.
+- **Pesos 1 a 3** (`PESOS`: 1 · Baixa, 2 · Média, 3 · Alta): os blocos livres
+  da semana (tempo de cada dia menos as revisões) vão para as matérias ativas
+  com conteúdo pendente, na proporção dos pesos, pelo método dos maiores restos
+  (desempate: maior peso, depois a posição no edital). Mudar o tempo do dia
+  mantém as proporções. O mesmo cálculo gera `alocacaoSemanal` e as datas do
+  Edital.
+- **Bloco mínimo**: toda matéria ativa com conteúdo pendente aparece ao menos
+  uma vez na semana (uma revisão conta); se ficou sem bloco, recebe 1, tirado
+  da que ficou com mais. Sem espaço nem para isso, ela vai em `semTempo` da
+  semana (aviso no painel do aluno e na semana do aluno).
+- **Metas e dias**: os blocos de cada matéria viram metas de até a duração
+  máxima (`maxSessao`, 30 a 180 min), iguais; as matérias se intercalam em
+  rodadas (maior peso primeiro) e cada meta vai para o dia com mais espaço que
+  ainda não tem a matéria. No dia: revisões, depois a ordem do aluno, depois o
+  edital. Determinístico (ids com a chave da semana e um índice).
+- **Revisões**: 30 min para matéria de peso 1 e 60 min para peso 2 ou 3
+  (`duracaoRevisao`), sempre pelo peso atual; entram no seu dia mesmo sem
+  espaço (o dia fica sinalizado). O moderador só define os intervalos.
+
+| Quem | O quê |
+|---|---|
+| **Moderador** | matérias ativas, peso, duração máxima da meta, velocidade da matéria, limites do tempo por dia (`limitesTempo`), intervalos das revisões e as permissões do aluno |
+| **Aluno** (cada item é uma permissão, ligada por padrão) | tempo de estudo de cada dia (`disponibilidade`, de 30 em 30 dentro dos limites e com o mínimo semanal de 30 min por matéria com conteúdo); dia de cada meta dentro da semana atual, de hoje em diante (`moverMetas`); ordem das matérias no dia e das metas de um dia (`ordemMaterias`) |
+
+Nada do que o aluno ajusta avisa o moderador. Mudar o tempo grava log; mover
+metas, não.
+
+**Migração** (`core/migracao.js`, `planos.migrarMotor`): automática e
+idempotente, com log `migrarMotor` e `motorVersao: 2`. O peso sai da
+incidência antiga (minutos da matéria ÷ minutos da maior: ≥ 0,75 → 3;
+≥ 0,45 → 2; senão 1); tempos e durações vão para o bloco mais próximo;
+`revisao.duracaoMin` sai. As jornadas migram quando o moderador entra; o plano
+do aluno, quando o moderador abre o painel dele ou usa "Atualizar motor de
+todos os alunos" em Pesos. Até lá, o motor converte o plano em memória.
+
 ## Arquitetura
 
 ```
@@ -137,6 +184,11 @@ firestore.rules, storage.rules   controle de acesso real
   tira das listas, mas o histórico continua mostrando o nome.
 - **Datas locais**: nada de `toISOString()` para datas do dia; ver
   `core/datas.js`.
+- **Semana validada no serviço**: o aluno grava `semanas/{alunoId}` inteiro,
+  e as regras não validam os arrays de metas; blocos de 30, dias da semana
+  atual e as permissões `moverMetas` e `ordemMaterias` são checados em
+  `services/estudo.js`. Endurecer isso no servidor exigiria uma Cloud
+  Function (fora do escopo).
 
 ### Coleções
 
@@ -144,12 +196,12 @@ firestore.rules, storage.rules   controle de acesso real
 |---|---|
 | `usuarios/{uid}` | papel (`aluno`/`moderador`), nome, e-mail, vestibular, curso, turma, acesso |
 | `areas`, `materias`, `topicos`, `subtopicos`, `vestibulares`, `cursos` | estrutura acadêmica (id, nome, ordem, pai, carga, arquivado) |
-| `modelosPlano` | jornadas (vestibular, curso, modalidade, matérias em ordem com incidência, prioridade, velocidade e visibilidade, tópicos, revisões, permissões do aluno) |
-| `planos/{alunoId}` | edital do aluno (cópia editável da jornada) + cronograma recalculado |
+| `modelosPlano` | jornadas (vestibular, curso, modalidade, matérias em ordem com `peso`, `ativa`, `maxSessao` e velocidade, tópicos, intervalos de revisão, `limitesTempo`, permissões do aluno, `cargaReferencia` das prévias, `motorVersao`) |
+| `planos/{alunoId}` | edital do aluno (cópia editável da jornada: `materias[].peso`, `ativa`, `maxSessao`, `limitesTempo { minDia, maxDia }`, `disponibilidade`, `ordemMaterias`, `ordemTopicos`, `motorVersao`) + `alocacaoSemanal` e cronograma recalculados |
 | `planosAnteriores` | edital substituído, guardado inteiro |
 | `vistos/{alunoId}` | subtópicos que o aluno marcou como vistos |
 | `progresso/{alunoId}` | minutos e conclusão por conteúdo (somados junto com cada sessão) |
-| `semanas/{alunoId}`, `resumosSemana` | metas da semana atual e fechamento das semanas |
+| `semanas/{alunoId}`, `resumosSemana` | metas da semana atual (em blocos de 30, com `semTempo`) e fechamento das semanas |
 | `sessoesEstudo` | cada estudo feito (data, conteúdo, minutos, origem) |
 | `revisoes` | revisões espaçadas (agendada, realizada, atrasada, ignorada) |
 | `questoes`, `simulados` | registros do aluno (simulado com PDF opcional no Storage e `provaId` quando veio da galeria) |

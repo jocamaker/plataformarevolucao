@@ -555,7 +555,8 @@ h1, h2, h3, h4,
 .segmentado button:disabled { opacity: 0.45; cursor: default; }
 .segmentado button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-.grade-dias--passos { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.grade-dias--passos { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px 16px; }
+.grade-dias--passos .campo--dia { justify-items: center; }
 .grade-dias--passos .passo b { min-width: 52px; font-size: 13.5px; }
 .divisao-materias ul { list-style: none; display: grid; gap: 4px; margin-top: 6px; }
 .divisao-materias li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }

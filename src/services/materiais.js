@@ -35,7 +35,7 @@ export const AREA_DA_MATERIA = {
   biologia: { icone: "dna", cor: "#22A447" }, quimica: { icone: "frasco", cor: "#0EA5A0" },
   linguagens: { icone: "idiomas", cor: "#7C4DEB" }, filosofia: { icone: "cerebro", cor: "#E0457B" },
   sociologia: { icone: "pessoas", cor: "#F97316" }, geografia: { icone: "globo", cor: "#8B5134" },
-  historia: { icone: "coluna", cor: "#F59E0B" },
+  historia: { icone: "coluna", cor: "#F59E0B" }, "obras-literarias": { icone: "livro", cor: "#9A7432" },
 };
 
 const nomeArquivoSeguro = (nome = "arquivo.pdf") =>

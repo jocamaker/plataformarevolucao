@@ -47,7 +47,7 @@ describe("instalação de demonstração", () => {
   it("cria estrutura, planos gerais e planos individuais, sem histórico inventado", async () => {
     const { repo, uidDe } = t;
     const ana = await uidDe("aluno@curso.com");
-    expect((await repo.listar("materias")).map((m) => m.nome)).toEqual(["Biologia", "Física", "Química", "Matemática", "Linguagens", "Filosofia", "Sociologia", "Geografia", "História"]);
+    expect((await repo.listar("materias")).map((m) => m.nome)).toEqual(["Biologia", "Física", "Química", "Matemática", "Linguagens", "Obras literárias", "Filosofia", "Sociologia", "Geografia", "História"]);
     expect((await repo.listar("modelosPlano")).length).toBe(7);
     const plano = await repo.obter("planos", ana);
     expect(plano.modeloId).toBe("modelo-fuvest");
@@ -492,7 +492,7 @@ describe("áreas de materiais e provas para simulado", () => {
     await t.entrar("moderador@curso.com");
     const antigo = await t.s.materiais.salvar({ titulo: "Resumo de Citologia", materiaId: "biologia" }, { arquivo: pdf("citologia.pdf") });
     const semMateria = await t.s.materiais.salvar({ titulo: "Cronograma geral" }, { arquivo: pdf("geral.pdf") });
-    expect(await t.s.materiais.criarAreasDasMaterias()).toBe(9);
+    expect(await t.s.materiais.criarAreasDasMaterias()).toBe((await t.repo.listar("materias")).length); // uma por matéria
     expect(await t.s.materiais.criarAreasDasMaterias()).toBe(0); // não duplica
     const areas = await t.repo.listar("areasMateriais");
     const fisica = areas.find((a) => a.materiaId === "fisica");

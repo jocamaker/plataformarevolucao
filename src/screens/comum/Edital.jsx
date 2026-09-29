@@ -473,7 +473,7 @@ export function TempoPorDia({ plano, progresso, podeEditar, aoOperar, ocupado })
   return (
     <section className="form" aria-labelledby="t-horas">
       <h3 id="t-horas" className="subtitulo subtitulo--sm"><Clock4 aria-hidden="true" /> Tempo de estudo por dia</h3>
-      <p className="previa-linha">De 30 em 30 min, entre {fmtMin(lim.minDia)} e {fmtMin(lim.maxDia)} por dia. Zero é dia de folga.</p>
+      <p className="previa-linha">De 30 em 30 min, entre {lim.minDia ? fmtMin(lim.minDia) : "0"} e {fmtMin(lim.maxDia)} por dia. Zero é dia de folga.</p>
       <div className="grade-dias grade-dias--passos">
         {DIAS.map((d) => (
           <div key={d.k} className="campo campo--dia">
