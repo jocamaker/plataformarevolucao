@@ -23,6 +23,7 @@ const Alunos = sob(() => import("./screens/moderador/Alunos.jsx"));
 const AlunoPainel = sob(() => import("./screens/moderador/AlunoPainel.jsx"));
 const Jornadas = sob(() => import("./screens/moderador/Jornadas.jsx"), "Jornadas");
 const Jornada = sob(() => import("./screens/moderador/Jornadas.jsx"), "Jornada");
+const Pesos = sob(() => import("./screens/moderador/Pesos.jsx"));
 const Estrutura = sob(() => import("./screens/moderador/Estrutura.jsx"));
 const MateriaisModerador = sob(() => import("./screens/moderador/Materiais.jsx"));
 const AreaMateriaisModerador = sob(() => import("./screens/moderador/Materiais.jsx"), "AreaMateriaisModerador");
@@ -100,6 +101,7 @@ export default function App() {
                 <Route path="alunos/:id/redacao/:did" element={<RedacaoModerador />} />
                 <Route path="jornadas" element={<Jornadas />} />
                 <Route path="jornadas/:id" element={<Jornada />} />
+                <Route path="pesos" element={<Pesos />} />
                 <Route path="planos/*" element={<Navigate to="/moderador/jornadas" replace />} />
                 <Route path="estrutura" element={<Estrutura />} />
                 <Route path="materiais" element={<MateriaisModerador />} />

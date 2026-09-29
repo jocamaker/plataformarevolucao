@@ -544,3 +544,51 @@ h1, h2, h3, h4,
 }
 .eyebrow { color: var(--ouro); }
 .secao > .eyebrow.perigo { color: var(--danger); }
+
+/* ---------- Motor de metas: pesos, tempo por dia, ordem ---------- */
+
+.segmentado { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-strong); border-radius: 9px; overflow: hidden; }
+.segmentado button { padding: 5px 9px; font-size: 12.5px; color: var(--muted); background: var(--surface); border-left: 1px solid var(--border); white-space: nowrap; }
+.segmentado button:first-child { border-left: 0; }
+.segmentado button[aria-checked="true"] { background: var(--acento); color: var(--acento-texto); }
+.segmentado button[aria-checked="true"] b { color: inherit; }
+.segmentado button:disabled { opacity: 0.45; cursor: default; }
+.segmentado button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.grade-dias--passos { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.grade-dias--passos .passo b { min-width: 52px; font-size: 13.5px; }
+.divisao-materias ul { list-style: none; display: grid; gap: 4px; margin-top: 6px; }
+.divisao-materias li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.divisao-materias li .num { margin-left: auto; color: var(--muted); }
+
+.lista-ordem { list-style: none; display: grid; gap: 6px; }
+.lista-ordem li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: grab; }
+.lista-ordem li.arrastando { opacity: 0.5; }
+.lista-ordem li > .num { width: 18px; color: var(--muted); font-size: 12.5px; }
+.lista-ordem .linha-acoes { margin-left: auto; }
+
+.pesos-topo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin-bottom: 16px; }
+.legenda-pesos { flex-basis: 100%; }
+.tabela-pesos th, .tabela-pesos td { vertical-align: top; }
+.tabela-pesos thead th { white-space: nowrap; }
+.pesos-grupo { text-align: center; border-bottom: 1px solid var(--border); }
+.pesos-celula { display: grid; gap: 6px; justify-items: start; min-width: 170px; }
+.pesos-divisao { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.pesos-acoes { display: grid; gap: 6px; margin-top: 4px; }
+.pesos-cartoes { display: grid; gap: 14px; }
+.pesos-cartoes .cartao { display: grid; gap: 10px; }
+.pesos-linha { display: grid; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.so-estreito { display: none; }
+@media (max-width: 760px) {
+  .so-largo { display: none; }
+  .so-estreito { display: grid; }
+}
+
+.dia-aviso { font-size: 11.5px; color: var(--danger); }
+.chip-linha { display: flex; align-items: stretch; gap: 4px; }
+.chip-linha > .chip { flex: 1; min-width: 0; }
+.chip-setas { display: grid; gap: 2px; }
+.chip-setas .icone-btn { width: 24px; height: 22px; }
+.chip--travada { opacity: 0.55; cursor: not-allowed; }
+.pendentes-semana { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
+.dia--bloqueado { opacity: 0.55; }

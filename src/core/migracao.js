@@ -13,7 +13,7 @@
 
 import { DIAS } from "./nucleo.js";
 import { BLOCO_MIN, DURACOES_META, arredBloco, arredMaxSessao } from "./blocos.js";
-import { LIMITES_PADRAO, pesoValido } from "./plano.js";
+import { LIMITES_PADRAO, minimoSemanal, pesoValido } from "./plano.js";
 
 export const MOTOR_VERSAO = 2;
 
@@ -54,4 +54,12 @@ export function migrarPlanoV2(plano, { minimo = 0 } = {}) {
   if (plano.disponibilidade) novo.disponibilidade = migrarDisponibilidade(plano.disponibilidade, novo.limitesTempo, minimo);
   const mudou = JSON.stringify(novo) !== JSON.stringify(plano);
   return { plano: mudou ? novo : plano, mudou };
+}
+
+/* Plano que o motor e as telas usam: um plano gravado antes do motor de
+   blocos é convertido em memória (pesos, blocos, revisões), para o aluno já
+   ver metas de 30 min antes de o moderador gravar a migração. */
+export function planoParaMotor(plano, ind, prog = {}) {
+  if (!plano || plano.motorVersao === MOTOR_VERSAO || !ind) return plano;
+  return migrarPlanoV2(plano, { minimo: minimoSemanal(migrarPlanoV2(plano).plano, ind, prog) }).plano;
 }

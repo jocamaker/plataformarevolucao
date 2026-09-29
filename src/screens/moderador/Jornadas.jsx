@@ -18,9 +18,12 @@ import { Botao, Campo, Carregando, Dialogo, MensagemErro, TituloPagina, Vazio } 
 const nomeModalidade = (id) => MODALIDADES.find((m) => m.id === id)?.nome || "";
 const NOVO = "__novo";
 
+export const CARGA_REFERENCIA = 1200; // 20 h por semana
+export const cargaDe = (modelo) => modelo?.cargaReferencia || CARGA_REFERENCIA;
+
 function resumoDa(modelo, ind) {
   const itens = itensDoPlano(modelo, ind);
-  const semanal = (modelo.materias || []).filter((m) => m.ativa !== false).reduce((x, m) => x + (m.minutosSemanais || 0), 0);
+  const semanal = cargaDe(modelo);
   const carga = itens.reduce((x, it) => x + it.duracao, 0);
   return { topicos: itens.length, semanal, carga, semanas: semanal ? Math.ceil(carga / semanal) : null, materias: (modelo.materias || []).filter((m) => m.ativa !== false).length };
 }
@@ -60,7 +63,7 @@ function NovaJornada({ fechar }) {
   return (
     <Dialogo aberto aoFechar={fechar} titulo="Nova jornada" largura={560}>
       <div className="form">
-        <p className="previa-linha">A jornada nasce com as {ind.materias.length} matérias do curso e todos os tópicos delas; as horas da semana são divididas por igual. Depois é só ajustar.</p>
+        <p className="previa-linha">A jornada nasce com as {ind.materias.length} matérias do curso, todos os tópicos delas e peso 2 em todas. Depois é só ajustar os pesos.</p>
         <div className="form-linha">
           <EscolhaOuNovo rotulo="Vestibular" valor={f.vestibularId} novoNome={f.novoVestibular} opcoes={ind.vestibulares} vazio="Selecione…" erro={erros.vestibularId || erros.nome}
             aoMudar={(v) => setF({ ...f, vestibularId: v })} aoMudarNovo={(v) => setF({ ...f, novoVestibular: v })} />
@@ -73,7 +76,7 @@ function NovaJornada({ fechar }) {
               {MODALIDADES.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </Campo>
-          <Campo rotulo="Horas por semana"><input className="entrada num" type="number" min="1" max="80" value={f.horas} onChange={(e) => setF({ ...f, horas: e.target.value })} /></Campo>
+          <Campo rotulo="Carga de referência (h/semana)" ajuda="Só para as prévias; o tempo real é o de cada aluno."><input className="entrada num" type="number" min="1" max="80" value={f.horas} onChange={(e) => setF({ ...f, horas: e.target.value })} /></Campo>
           <Campo rotulo="Data da prova (opcional)"><input className="entrada" type="date" value={f.dataAlvo} onChange={(e) => setF({ ...f, dataAlvo: e.target.value })} /></Campo>
         </div>
         <Campo rotulo="Nome (opcional)"><input className="entrada" value={f.nome} placeholder={sugestao || "Ex.: FUVEST · Medicina"} onChange={(e) => setF({ ...f, nome: e.target.value })} /></Campo>
@@ -102,7 +105,7 @@ export function Jornadas() {
   return (
     <>
       <TituloPagina eyebrow="Conteúdo programático" frase="*Jornadas* por vestibular"
-        texto="Cada jornada é o edital de um vestibular (e curso): matérias, tópicos e quanto cada uma pesa na semana. O aluno recebe uma cópia, que você ajusta no painel dele."
+        texto="Cada jornada é o edital de um vestibular (e curso): matérias, tópicos e o peso de cada uma. O aluno recebe uma cópia, que você ajusta no painel dele."
         direita={<Botao variante="solido" icone={Plus} onClick={() => setNova(true)}>Nova jornada</Botao>} />
       {arquivadas > 0 && (
         <div className="filtros" role="tablist">
@@ -119,7 +122,7 @@ export function Jornadas() {
               <Link key={m.id} to={m.id} className="cartao cartao-jornada" style={{ "--cor": ind.vestibular(m.vestibularId)?.cor }}>
                 <span className="eyebrow">{[ind.nomeVestibular(m.vestibularId), m.cursoId ? ind.nomeCurso(m.cursoId) : null, nomeModalidade(m.modalidade)].filter(Boolean).join(" · ")}</span>
                 <strong>{m.nome}</strong>
-                <span className="previa-linha">{r.materias} matérias · {r.topicos} tópicos · {fmtMin(r.semanal)} por semana</span>
+                <span className="previa-linha">{r.materias} matérias ativas · {r.topicos} tópicos</span>
                 <span className="cartao-jornada-rodape">{alunos ? `${alunos} ${alunos === 1 ? "aluno" : "alunos"}` : "nenhum aluno ainda"}</span>
               </Link>
             );
@@ -203,7 +206,7 @@ export function Jornada() {
         <div>
           <span className="eyebrow">{[ind.nomeVestibular(modelo.vestibularId), modelo.cursoId ? ind.nomeCurso(modelo.cursoId) : null, nomeModalidade(modelo.modalidade), modelo.periodo].filter(Boolean).join(" · ")}{modelo.arquivado ? " · arquivada" : ""}</span>
           <h1>{modelo.nome}</h1>
-          <p className="previa-linha">{r.materias} matérias · {r.topicos} tópicos · {fmtMin(r.semanal)} por semana{r.semanas ? ` · ≈ ${r.semanas} semanas` : ""}</p>
+          <p className="previa-linha">{r.materias} matérias ativas · {r.topicos} tópicos{r.semanas ? ` · ≈ ${r.semanas} semanas com ${fmtMin(r.semanal)} por semana` : ""}</p>
         </div>
         <div className="titulo-direita">
           <Botao variante="vidro" tamanho="sm" icone={Pencil} onClick={() => setEditar(true)}>Dados</Botao>
@@ -224,7 +227,8 @@ export function Jornada() {
       <MensagemErro erro={erro} />
       {retorno && !erro && <p className="retorno-curto" role="status">{retorno}</p>}
 
-      <TabelaIncidencia plano={modelo} ocupado={ocupado} aoAplicar={(ops) => operar(ops)} />
+      <TabelaIncidencia plano={modelo} ocupado={ocupado} capacidade={cargaDe(modelo)} aoAplicar={(ops) => operar(ops)}
+        rotuloCapacidade={<>Prévia com a carga de referência: <b>{fmtMin(cargaDe(modelo))}</b> por semana</>} />
 
       <section className="secao" aria-label="Conteúdo programático">
         <h2 className="subtitulo secao-titulo">Conteúdo programático</h2>
@@ -238,8 +242,8 @@ export function Jornada() {
       )}
 
       <details className="recolhivel">
-        <summary>Regras da jornada <small>velocidade, data-alvo, revisões e o que o aluno pode mudar</small></summary>
-        <Organizacao modelo plano={modelo} pode={{ ritmo: true, prazo: true, revisao: true, permissoes: true }} aoOperar={(op) => operar(op)} ocupado={ocupado} />
+        <summary>Regras da jornada <small>limites de tempo, velocidade, data-alvo, revisões e o que o aluno pode mudar</small></summary>
+        <Organizacao modelo plano={modelo} pode={{ ritmo: true, prazo: true, revisao: true, permissoes: true, limites: true }} aoOperar={(op) => operar(op)} ocupado={ocupado} />
       </details>
       {editar && <DadosDaJornada modelo={modelo} fechar={() => setEditar(false)} />}
     </>

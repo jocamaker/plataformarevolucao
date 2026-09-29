@@ -53,9 +53,22 @@ export const useTextosDoAluno = (id) => usar(id && ((s, cb) => s.textos.observar
 export const useBoasVindas = () => usar((s, cb) => s.textos.observarBoasVindas(cb), []);
 export const useConfigRedacao = () => usar((s, cb) => s.redacao.observarConfig(cb), []);
 
+/* Migração para o motor de blocos e pesos, uma vez por sessão: as jornadas
+   ao entrar como moderador; o plano de um aluno ao abrir o painel dele. */
+const migrados = new Set();
+export function useMigracaoMotor(ativo, alunoId = null) {
+  const { s } = useApp();
+  useEffect(() => {
+    const chave = alunoId || "jornadas";
+    if (!ativo || !s || migrados.has(chave)) return;
+    migrados.add(chave);
+    s.planos.migrarMotor(alunoId ? { alunoId } : {}).catch(() => migrados.delete(chave));
+  }, [ativo, alunoId, s]);
+}
+
 // só moderador
 export const useAlunos = () => usar((s, cb) => s.alunos.observarTodos(cb), []);
-export const useModelos = () => usar((s, cb) => s.planos.observarModelos(cb), []);
+export const useModelos = (ativo = true) => usar(ativo && ((s, cb) => s.planos.observarModelos(cb)), [ativo]);
 export const useTodosPlanos = () => usar((s, cb) => s.planos.observarTodosPlanos(cb), []);
 export const useTodoProgresso = () => usar((s, cb) => s.planos.observarTodoProgresso(cb), []);
 export const useQuestoesDesde = (inicio) => usar((s, cb) => s.questoes.observarDesde(inicio, cb), [inicio]);

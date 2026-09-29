@@ -10,6 +10,16 @@ import { useVisaoAluno } from "../../state/aluno.js";
 import { NomeConteudo, SeletorConteudo } from "../../ui/Conteudo.jsx";
 import { Barra, Botao, Campo, Carregando, Dialogo, Frase, MensagemErro, Vazio } from "../../ui/ui.jsx";
 import { QuadroSemana } from "./Semana.jsx";
+import { TEMPO_EXTRA } from "../../core/blocos.js";
+
+/* "Preciso de mais tempo": 30, 60, 90 ou 120 min (blocos de 30). */
+function EscolhaTempoExtra({ valor, aoMudar }) {
+  return (
+    <span className="segmentado" role="radiogroup" aria-label="Tempo a mais">
+      {TEMPO_EXTRA.map((m) => <button key={m} type="button" role="radio" aria-checked={valor === m} onClick={() => aoMudar(m)}>{fmtMin(m)}</button>)}
+    </span>
+  );
+}
 import { FormQuestoes } from "../comum/Registros.jsx";
 import { AvisoLinha, LerAviso } from "./Avisos.jsx";
 
@@ -77,8 +87,8 @@ function ComoEstaConteudo({ popup, fechar, plano, alunoId }) {
           </>
         ) : (
           <>
-            <Campo rotulo="Minutos a mais" ajuda="Entram como uma meta extra no próximo dia com mais folga nesta semana.">
-              <input className="entrada num" type="number" min="10" max="240" step="5" value={minutos} onChange={(e) => setMinutos(+e.target.value)} />
+            <Campo rotulo="Tempo a mais" ajuda="Entra como uma meta extra no próximo dia com mais folga nesta semana.">
+              <EscolhaTempoExtra valor={minutos} aoMudar={setMinutos} />
             </Campo>
             <Botao variante="solido" disabled={ocupado} onClick={() => executar(async () => {
               const dia = await s.estudo.tempoExtra(alunoId, { materiaId: popup.materiaId, topicoId: popup.topicoId, subtopicoId: popup.subtopicoId, itemId: popup.itemId, minutos });
@@ -116,12 +126,12 @@ function Replanejar({ aberto, fechar, alunoId, disp }) {
         {previa && (
           <>
             <p className="texto-dialogo">
-              O resto da semana é <strong>recalculado a partir do seu plano</strong>. As pendências entram primeiro, sempre dentro das horas livres de cada dia.
+              O resto da semana é <strong>recalculado a partir do seu plano</strong>. As pendências entram primeiro, sempre dentro do seu tempo de estudo de cada dia e em blocos de 30 min.
               O que você já concluiu fica como está.
             </p>
             <div className="replan-resumo">
               <div><strong className="num">{fmtMin(previa.resumo.totalRealocado)}</strong><span>tempo replanejado</span></div>
-              <div><strong className="num">{previa.resumo.materiasFundidas}</strong><span>blocos fundidos</span></div>
+              <div><strong className="num">{previa.resumo.qtdPendencias}</strong><span>{previa.resumo.qtdPendencias === 1 ? "pendência" : "pendências"}</span></div>
             </div>
             {previa.resumo.minutosSemEspaco > 0 && (
               <p className="aviso" role="note">
@@ -234,8 +244,10 @@ function RegistrarEstudo({ aberto, fechar, v }) {
             <>
               <SeletorConteudo valor={sel} aoMudar={setSel} erros={erros} obrigatorio={{ materia: true }} materias={aba === "mais" ? materiasDoPlano : undefined} />
               <div className="form-linha">
-                <Campo rotulo={aba === "fora" ? "Tempo estudado (min)" : "Tempo a mais (min)"} erro={erros.minutos}>
-                  <input className="entrada num" type="number" min="5" step="5" value={minutos} onChange={(e) => setMinutos(+e.target.value)} />
+                <Campo rotulo={aba === "fora" ? "Tempo estudado (min)" : "Tempo a mais"} erro={erros.minutos}>
+                  {aba === "fora"
+                    ? <input className="entrada num" type="number" min="5" step="5" value={minutos} onChange={(e) => setMinutos(+e.target.value)} />
+                    : <EscolhaTempoExtra valor={TEMPO_EXTRA.includes(minutos) ? minutos : null} aoMudar={setMinutos} />}
                 </Campo>
                 {aba === "fora" && <Campo rotulo="Quando" erro={erros.data}><input className="entrada" type="date" max={hoje} value={data} onChange={(e) => setData(e.target.value)} /></Campo>}
               </div>

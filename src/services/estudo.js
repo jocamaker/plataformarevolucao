@@ -14,23 +14,15 @@ import { apagarCampo, carimbo, ErroDados, incrementar, novoId } from "../data/co
 import { DISP_PADRAO, DIAS } from "../core/nucleo.js";
 import { BLOCO_MIN, TEMPO_EXTRA, arredBloco } from "../core/blocos.js";
 import {
-  conteudoDaVez, distribuirMinutos, duracaoRevisao, estadoItem, itensDoPlano, materiasDoMotor, minimoSemanal, pesoDaMateria,
+  conteudoDaVez, distribuirMinutos, duracaoRevisao, estadoItem, itensDoPlano, materiasDoMotor, pesoDaMateria,
 } from "../core/plano.js";
-import { migrarPlanoV2 } from "../core/migracao.js";
+import { planoParaMotor } from "../core/migracao.js";
 import {
   acharMeta, adicionarTempoExtra, aplicarReplanejamento, lerIdRevisaoAvulsa, marcarMeta, moverMeta,
   previaReplanejamento, reordenarNoDia, reorganizarSemana, revisoesAtrasadas, semanaVigente, sincronizarRevisoes,
 } from "../core/semana.js";
 import { ErroValidacao, idLogRemocao, opsDeLog, recentesPrimeiro } from "./base.js";
 import { opRevisoesDoItem, opsCancelarRevisoes } from "./planos.js";
-
-/* Plano que o motor usa: um plano gravado antes do motor de blocos é
-   convertido em memória (pesos, blocos, revisões), para o aluno já ver metas
-   de 30 min antes de o moderador gravar a migração. */
-export function contextoDoPlano(plano, ind, prog = {}) {
-  if (!plano || plano.motorVersao === 2) return plano;
-  return migrarPlanoV2(plano, { minimo: minimoSemanal(migrarPlanoV2(plano).plano, ind, prog) }).plano;
-}
 
 export function servicoEstudo(ctx) {
   const { repo } = ctx;
@@ -41,7 +33,7 @@ export function servicoEstudo(ctx) {
       repo.listar("revisoes", [["alunoId", "==", alunoId]]), repo.obter("semanas", alunoId), ctx.indice(),
     ]);
     const prog = progDoc?.itens || {};
-    const plano = contextoDoPlano(bruto, ind, prog);
+    const plano = planoParaMotor(bruto, ind, prog);
     const itens = plano ? itensDoPlano(plano, ind) : [];
     return {
       plano, prog, ind, itens, revisoes, doc,

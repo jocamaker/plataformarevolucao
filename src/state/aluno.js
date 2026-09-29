@@ -6,7 +6,10 @@ import { useApp } from "./AppContext.jsx";
 import {
   useAluno, usePlano, useProgresso, useQuestoes, useResumosSemana, useRevisoes, useSemana, useSessoes, useSimulados,
 } from "./hooks.js";
-import { calcularAtrasos, calcularProgressoPlano, conteudoDaVez, estadoItem, itensDoPlano, statusItem } from "../core/plano.js";
+import {
+  calcularAtrasos, calcularProgressoPlano, conteudoDaVez, duracaoRevisao, estadoItem, itensDoPlano, pesoDaMateria, statusItem,
+} from "../core/plano.js";
+import { planoParaMotor } from "../core/migracao.js";
 import { conteudoDaMeta, listasDoDia } from "../core/semana.js";
 import { consistencia, diasComAtividade } from "../core/desempenho.js";
 import { somarDias } from "../core/datas.js";
@@ -14,8 +17,10 @@ import { somarDias } from "../core/datas.js";
 export function useVisaoAluno(alunoId, { semana: comSemana = true } = {}) {
   const { ind } = useApp();
   const aluno = useAluno(alunoId);
-  const plano = usePlano(alunoId);
+  const planoBruto = usePlano(alunoId);
   const progresso = useProgresso(alunoId);
+  // plano antigo: convertido em memória para o motor de blocos (a gravação é do moderador)
+  const plano = useMemo(() => (planoBruto && ind ? planoParaMotor(planoBruto, ind, progresso || {}) : planoBruto), [planoBruto, ind, progresso]);
   const { semana, hoje } = useSemana(comSemana ? alunoId : null);
   const revisoes = useRevisoes(alunoId);
   const sessoes = useSessoes(alunoId);
@@ -32,7 +37,8 @@ export function useVisaoAluno(alunoId, { semana: comSemana = true } = {}) {
     const daVez = (materiaId) => conteudoDaVez(itens, prog, materiaId, ind);
     const comConteudo = (m) => ({ ...m, ...conteudoDaMeta(m, daVez) });
     const semanaValida = semana && semana.chave <= hoje && hoje <= somarDias(semana.chave, 6) ? semana : null;
-    const dia = semanaValida ? listasDoDia(semanaValida, hoje, revisoes) : { metasHoje: [], atrasadas: [] };
+    const duracaoRev = (materiaId) => duracaoRevisao(pesoDaMateria(plano, materiaId));
+    const dia = semanaValida ? listasDoDia(semanaValida, hoje, revisoes, duracaoRev) : { metasHoje: [], atrasadas: [] };
     const metasHoje = dia.metasHoje.map(comConteudo);
     const atrasadas = dia.atrasadas.map(comConteudo);
     const todasDoDia = [...atrasadas, ...metasHoje];
@@ -58,5 +64,5 @@ export function useVisaoAluno(alunoId, { semana: comSemana = true } = {}) {
     };
   }, [carregando, hoje, plano, progresso, semana, revisoes, sessoes, questoes, simulados, ind]);
 
-  return { carregando, aluno, plano, progresso: progresso || {}, semanaDoc: semana, revisoes, sessoes, questoes, simulados, resumosSemana, hoje, ind, ...(derivado || {}) };
+  return { carregando, aluno, plano, planoBruto, progresso: progresso || {}, semanaDoc: semana, revisoes, sessoes, questoes, simulados, resumosSemana, hoje, ind, ...(derivado || {}) };
 }
