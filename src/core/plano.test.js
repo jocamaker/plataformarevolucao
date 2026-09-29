@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { estruturaInicial, indiceEstrutura } from "./estrutura.js";
 import {
-  alterarPlano, calcularAlocacao, calcularAtrasos, calcularProgressoPlano, cicloDoPlano, conteudoDaVez,
-  distribuirMinutos, estadoItem, impactoAlteracao, itensDoPlano, planoDoModelo, recalcularPlano,
-  revisoesDoItem, statusItem, sugerirModelo,
+  alterarPlano, calcularAlocacao, calcularAtrasos, calcularProgressoPlano, conteudoDaVez, distribuirMinutos, duracaoRevisao,
+  estadoItem, impactoAlteracao, itensDoPlano, materiasDoMotor, minimoSemanal, planoDoModelo, recalcularPlano,
+  revisoesDoItem, statusItem, sugerirModelo, validarDisponibilidade,
 } from "./plano.js";
-import { gerarSemana, DIAS } from "./nucleo.js";
+import { DIAS } from "./nucleo.js";
+import { gerarSemanaNova } from "./semana.js";
 
 // estrutura base + um segundo tópico de Biologia para os testes de sequência
 const base = estruturaInicial();
@@ -17,14 +18,14 @@ const DISP = { seg: 120, ter: 120, qua: 120, qui: 120, sex: 120, sab: 0, dom: 0 
 function modeloBio() {
   return {
     id: "m1", nome: "FUVEST Medicina", vestibularId: "fuvest", cursoId: "medicina", versao: 2, ritmo: 1,
-    revisao: { intervalos: [7, 30], duracaoMin: 20 },
+    revisao: { intervalos: [7, 30] },
     materias: [
-      { materiaId: "biologia", minutosSemanais: 300, maxSessao: 60, prioridade: 1, ritmo: 1,
+      { materiaId: "biologia", peso: 3, maxSessao: 60, ritmo: 1,
         topicos: [
           { topicoId: "bi1", subtopicos: ind.subtopicosDoTopico("bi1").map((s) => ({ subtopicoId: s.id })) },
           { topicoId: "bi2", subtopicos: [] },
         ] },
-      { materiaId: "historia", minutosSemanais: 120, maxSessao: 60, prioridade: 2, ritmo: 1,
+      { materiaId: "historia", peso: 2, maxSessao: 60, ritmo: 1,
         topicos: [{ topicoId: "h2", subtopicos: [] }] },
     ],
   };
@@ -54,7 +55,7 @@ describe("plano individual a partir do plano geral", () => {
     const { plano: oculto } = alterarPlano(novoPlano(), ind, { tipo: "definirMateria", materiaId: "historia", campos: { ativa: false } });
     expect(oculto.materias.map((m) => m.materiaId)).toEqual(["biologia", "historia"]);
     expect(itensDoPlano(oculto, ind).some((i) => i.materiaId === "historia")).toBe(false);
-    expect(cicloDoPlano(oculto, ind).alocacoes.map((a) => a.materiaId)).toEqual(["biologia"]);
+    expect(materiasDoMotor(oculto, ind).map((a) => a.materiaId)).toEqual(["biologia"]);
   });
 
   it("o ritmo muda a duração efetiva dos conteúdos", () => {
@@ -102,33 +103,39 @@ describe("progresso e status dos itens", () => {
 });
 
 describe("alocação, cronograma e recálculo", () => {
-  it("sem data-alvo usa os minutos por semana do plano", () => {
+  it("sem data-alvo reparte a capacidade semanal pelos pesos (3 : 2)", () => {
+    const plano = novoPlano(); // 600 min = 20 blocos
+    const itens = itensDoPlano(plano, ind);
+    expect(calcularAlocacao(plano, itens, {}, HOJE).alocacao).toEqual({ biologia: 360, historia: 240 });
+  });
+
+  it("com data-alvo, aponta as matérias em risco sem mudar os pesos", () => {
+    const plano = { ...novoPlano(), dataAlvo: "2026-10-05", disponibilidade: { ...DISP, qua: 0, qui: 0, sex: 0 } }; // 240 min/sem, 1 semana
+    const itens = itensDoPlano(plano, ind);
+    const r = calcularAlocacao(plano, itens, {}, HOJE);
+    expect(r.alocacao).toEqual({ biologia: 150, historia: 90 }); // 8 blocos: 5 + 3
+    expect(r.emRisco).toEqual(["biologia", "historia"]);
+    expect(r.faltaSemanal).toBe(360 + 240 - 240);
+    const folgado = calcularAlocacao({ ...plano, dataAlvo: "2026-12-07" }, itens, {}, HOJE); // 10 semanas
+    expect(folgado.emRisco).toEqual([]);
+  });
+
+  it("matéria concluída sai da repartição; o tempo dela vai para as outras", () => {
     const plano = novoPlano();
     const itens = itensDoPlano(plano, ind);
-    expect(calcularAlocacao(plano, itens, {}, HOJE).alocacao).toEqual({ biologia: 300, historia: 120 });
+    const prog = { "t:h2": { concluido: true } };
+    expect(calcularAlocacao(plano, itens, prog, HOJE).alocacao).toEqual({ biologia: 600, historia: 0 });
   });
 
-  it("com data-alvo, cada matéria recebe o maior entre o configurado e o necessário", () => {
-    const base = novoPlano();
-    base.materias[0].minutosSemanais = 60; // pouco para terminar em 1 semana
-    const plano = { ...base, dataAlvo: "2026-10-05" }; // 1 semana
-    const itens = itensDoPlano(plano, ind);
-    const restanteBio = itens.filter((i) => i.materiaId === "biologia").reduce((s, i) => s + i.duracao, 0);
-    const r = calcularAlocacao(plano, itens, {}, HOJE);
-    expect(r.alocacao.biologia).toBe(Math.ceil(restanteBio / 5) * 5); // necessário > 60
-    expect(r.alocacao.historia).toBe(240); // Era Vargas tem 240 min: 240 em 1 semana > 120 configurados
-    const folgado = calcularAlocacao({ ...plano, dataAlvo: "2026-12-07" }, itens, {}, HOJE); // 10 semanas
-    expect(folgado.alocacao.historia).toBe(120); // configurado > necessário (24/sem)
-  });
-
-  it("sem espaço para tudo, a prioridade alta é atendida primeiro e a falta é informada", () => {
-    const plano = { ...novoPlano(), dataAlvo: "2026-10-05", disponibilidade: { ...DISP, qua: 0, qui: 0, sex: 0 } }; // 240 min/sem
-    const itens = itensDoPlano(plano, ind);
-    const r = calcularAlocacao(plano, itens, {}, HOJE);
-    expect(r.alocacao.biologia).toBe(240); // prioridade 1 leva o que cabe
-    expect(r.alocacao.historia).toBe(0);
-    expect(r.faltaSemanal).toBeGreaterThan(0);
-    expect(r.emRisco).toContain("historia");
+  it("tempo de estudo por dia: passos de 30, dentro dos limites e com o mínimo semanal", () => {
+    const plano = novoPlano();
+    expect(minimoSemanal(plano, ind)).toBe(60); // 2 matérias com conteúdo pendente
+    expect(validarDisponibilidade(DISP, { minDia: 0, maxDia: 480 }, 60)).toEqual({});
+    expect(validarDisponibilidade({ ...DISP, seg: 45 }, undefined, 60).seg).toMatch(/30 min/);
+    expect(validarDisponibilidade({ ...DISP, seg: 510 }, { minDia: 0, maxDia: 480 }, 60).seg).toMatch(/Entre/);
+    const pouco = Object.fromEntries(DIAS.map((d) => [d.k, 0]));
+    pouco.seg = 30;
+    expect(validarDisponibilidade(pouco, undefined, 60).disponibilidade).toBe("Seu tempo semanal precisa ser de pelo menos 1 h para caber ao menos um bloco de cada matéria");
   });
 
   it("projeta datas dentro dos dias disponíveis e recalcula sem apagar concluídos", () => {
@@ -176,11 +183,13 @@ describe("atrasos e progresso do plano", () => {
     expect(inicios).toEqual([...inicios].sort());
   });
 
-  it("revisões agendadas a partir da conclusão", () => {
-    expect(revisoesDoItem("2026-09-30", plano.revisao)).toEqual([
-      { dataPrevista: "2026-10-07", duracaoMin: 20 },
-      { dataPrevista: "2026-10-30", duracaoMin: 20 },
+  it("revisões agendadas a partir da conclusão, com a duração pelo peso", () => {
+    expect(revisoesDoItem("2026-09-30", plano.revisao, 3)).toEqual([
+      { dataPrevista: "2026-10-07", duracaoMin: 60 },
+      { dataPrevista: "2026-10-30", duracaoMin: 60 },
     ]);
+    expect(revisoesDoItem("2026-09-30", plano.revisao, 1).map((r) => r.duracaoMin)).toEqual([30, 30]);
+    expect(duracaoRevisao(2)).toBe(60);
   });
 });
 
@@ -193,6 +202,10 @@ describe("alterações individuais com histórico", () => {
     const r2 = alterarPlano(plano, ind, { tipo: "moverMateria", materiaId: "historia", passo: -1 });
     expect(r2.plano.materias.map((m) => m.materiaId)).toEqual(["historia", "biologia"]);
     expect(r2.log[0].descricao).toMatch(/Antecipou História/);
+    const r3 = alterarPlano(plano, ind, { tipo: "definirMateria", materiaId: "historia", campos: { peso: 1, maxSessao: 90 } });
+    expect(r3.log.map((l) => [l.descricao, l.antes, l.depois])).toEqual([["Mudou peso de História", "2 · Média", "1 · Baixa"], ["Mudou duração máxima da meta de História", 60, 90]]);
+    // valores fora do permitido não entram
+    expect(alterarPlano(plano, ind, { tipo: "definirMateria", materiaId: "historia", campos: { peso: 5, maxSessao: 45 } }).log).toEqual([]);
   });
 
   it("adicionar matéria traz tópicos e subtópicos da estrutura; alteração sem efeito não registra", () => {
@@ -220,24 +233,28 @@ describe("alterações individuais com histórico", () => {
   });
 });
 
-describe("integração com o motor da semana do núcleo", () => {
+describe("integração com o motor da semana", () => {
+  const ctxDo = (plano, revisoes = []) => {
+    const itens = itensDoPlano(plano, ind);
+    return {
+      materias: materiasDoMotor(plano, ind, itens, {}), disp: plano.disponibilidade, revisoes, ordemMaterias: plano.ordemMaterias,
+      duracaoRevisao: () => 60, conteudoDaVez: (m) => conteudoDaVez(itens, {}, m, ind),
+    };
+  };
+
   it("as metas da semana saem com tópico e subtópico do plano individual", () => {
     const plano = recalcularPlano(novoPlano(), ind, {}, HOJE).plano;
     const itens = itensDoPlano(plano, ind);
-    const semana = gerarSemana(cicloDoPlano(plano, ind), plano.disponibilidade, [], {
-      conteudoDaVez: (m) => conteudoDaVez(itens, {}, m, ind), semana: HOJE,
-    });
-    const metas = DIAS.flatMap((d) => semana[d.k]);
+    const metas = DIAS.flatMap((d) => gerarSemanaNova(ctxDo(plano), HOJE).metas[d.k]);
     const bio = metas.find((m) => m.materiaId === "biologia");
     expect(bio).toMatchObject({ topicoId: "bi1", subtopicoId: itens[0].subtopicoId, itemId: itens[0].itemId });
     expect(metas.find((m) => m.materiaId === "historia")).toMatchObject({ topicoId: "h2", itemId: "t:h2" });
   });
 
   it("revisões entram pela data dentro da semana informada", () => {
-    const revisoes = [{ id: "r1", materiaId: "biologia", materia: "Biologia", topicoId: "bi1", topico: "Citologia", duracaoMin: 20,
-      sessoes: [{ dia: "2026-10-01", status: "agendada" }, { dia: "2026-10-06", status: "agendada" }] }];
-    const s = gerarSemana({ alocacoes: [] }, DISP, revisoes, { semana: HOJE });
-    expect(s.qui.map((m) => m.tipo)).toEqual(["revisao"]); // 01/10 é quinta
-    expect(s.ter).toEqual([]); // 06/10 é da semana seguinte
+    const revisoes = [{ id: "r1", materiaId: "biologia", topicoId: "bi1", sessoes: [{ dia: "2026-10-01", status: "agendada" }, { dia: "2026-10-06", status: "agendada" }] }];
+    const s = gerarSemanaNova(ctxDo(novoPlano(), revisoes), HOJE).metas;
+    expect(s.qui[0]).toMatchObject({ tipo: "revisao", revisaoId: "r1", dia: "2026-10-01" }); // 01/10 é quinta
+    expect(DIAS.flatMap((d) => s[d.k]).filter((m) => m.tipo === "revisao")).toHaveLength(1); // 06/10 é da semana seguinte
   });
 });

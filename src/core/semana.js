@@ -1,16 +1,21 @@
 /* Semana de metas do aluno (funções puras sobre o estado da semana).
 
-   Estado: { chave, metas: { seg: [meta], … }, pendentes: [meta], editada, geracao }
+   Estado: { chave, metas: { seg: [meta], … }, pendentes: [meta], editada, geracao,
+             motorVersao, semTempo }
    Meta:   { id, tipo: "ciclo" | "revisao", materiaId, minutos, done, feitoEm,
              sessaoId, topicoId, subtopicoId, itemId, revisaoId, dia, extra, origem }
+   Toda meta tem minutos em blocos de 30 (ver blocos.js e motor.js).
 
-   Contexto do motor: { ciclo, disp, revisoes, conteudoDaVez(materiaId) }, montado
-   a partir do plano individual (ver services/estudo.js). O conteúdo de uma
-   meta ainda aberta é sempre o "da vez" (segue o progresso); o de uma meta
-   feita é o que ficou gravado na sessão. */
+   Contexto do motor (montado a partir do plano em services/estudo.js):
+     { materias, disp, inicio, revisoes, ordemMaterias, duracaoRevisao(materiaId),
+       conteudoDaVez(materiaId) }
+   O conteúdo de uma meta ainda aberta é sempre o "da vez" (segue o progresso);
+   o de uma meta feita é o que ficou gravado na sessão. */
 
-import { DIAS, dataParaDiaSemana, gerarSemana, recalcularPlanoInteligente } from "./nucleo.js";
+import { DIAS, dataParaDiaSemana } from "./nucleo.js";
 import { fmtDataCurta, inicioDaSemana, somarDias } from "./datas.js";
+import { BLOCO_MIN, arredBloco, paraBlocos } from "./blocos.js";
+import { ordenarDia, planejarSemana, rankDaOrdem } from "./motor.js";
 
 export const idxDia = (k) => DIAS.findIndex((d) => d.k === k);
 export const chaveDoDia = (iso) => dataParaDiaSemana(iso);
@@ -22,8 +27,16 @@ export function datasDaSemana(chave) {
 
 const vazia = () => Object.fromEntries(DIAS.map((d) => [d.k, []]));
 
+// duração de uma revisão: pelo peso atual da matéria (contexto) ou, sem ele,
+// a gravada na revisão, em blocos de 30
+const duracaoPadrao = (r) => Math.max(BLOCO_MIN, arredBloco(r?.duracaoMin || BLOCO_MIN));
+const duracaoDa = (ctxOuFn, r) => {
+  const fn = typeof ctxOuFn === "function" ? ctxOuFn : ctxOuFn?.duracaoRevisao;
+  return fn ? fn(r.materiaId) : duracaoPadrao(r);
+};
+
 // campos que ficam no banco (nomes vêm do índice na hora de mostrar)
-function limpa(m, prefixo) {
+function limpa(m, prefixo = "") {
   return {
     id: `${prefixo}${m.id}`, tipo: m.tipo === "revisao" ? "revisao" : "ciclo", materiaId: m.materiaId || "",
     minutos: m.minutos, done: !!m.done, topicoId: m.topicoId || null, subtopicoId: m.subtopicoId || null,
@@ -33,25 +46,34 @@ function limpa(m, prefixo) {
   };
 }
 
-// dia de cada revisão na semana (o motor não guarda a data na meta)
-function comDiaDaRevisao(metas, ctx, chave) {
-  const datas = datasDaSemana(chave);
-  DIAS.forEach((d) => (metas[d.k] || []).forEach((m) => { if (m.tipo === "revisao") m.dia = datas[d.k]; }));
-  return metas;
+// revisões agendadas dentro da semana (a partir de `desde`, se informado)
+function revisoesDaSemana(revisoes, chave, desde = chave) {
+  const fim = somarDias(chave, 6);
+  const out = [];
+  (revisoes || []).forEach((r) => (r.sessoes || []).forEach((s) => {
+    if (s.status !== "agendada" || s.dia < chave || s.dia > fim || s.dia < desde) return;
+    out.push({ r, dia: s.dia });
+  }));
+  return out.sort((a, b) => a.dia.localeCompare(b.dia) || String(a.r.id).localeCompare(String(b.r.id)));
 }
+
+const comConteudo = (ctx, m) => (m.tipo === "ciclo" ? { ...m, ...(ctx.conteudoDaVez?.(m.materiaId) || {}) } : m);
 
 /* Dias antes do início do plano (ctx.inicio) não recebem metas: quem começa
    no meio da semana não nasce com atrasos de dias em que o plano nem existia. */
 export function gerarSemanaNova(ctx, chave) {
   const datas = datasDaSemana(chave);
-  const disp = ctx.inicio && ctx.inicio > chave
-    ? Object.fromEntries(DIAS.map((d) => [d.k, datas[d.k] < ctx.inicio ? 0 : Number(ctx.disp?.[d.k]) || 0]))
-    : ctx.disp;
-  const bruta = gerarSemana(ctx.ciclo, disp, ctx.revisoes, { semana: chave, conteudoDaVez: ctx.conteudoDaVez });
-  comDiaDaRevisao(bruta, ctx, chave);
+  const capacidade = Object.fromEntries(DIAS.map((d) => [d.k, ctx.inicio && datas[d.k] < ctx.inicio ? 0 : Number(ctx.disp?.[d.k]) || 0]));
+  const revisoes = revisoesDaSemana(ctx.revisoes, chave, ctx.inicio && ctx.inicio > chave ? ctx.inicio : chave).map(({ r, dia }) => ({
+    k: chaveDoDia(dia), blocos: paraBlocos(duracaoDa(ctx, r)), revisaoId: r.id, dia, materiaId: r.materiaId || "",
+    topicoId: r.topicoId || null, subtopicoId: r.subtopicoId || null, itemId: r.itemId || null,
+  }));
+  const { dias, resumo } = planejarSemana({
+    materias: ctx.materias || [], capacidade, revisoes, ordemMaterias: ctx.ordemMaterias, prefixo: `${chave}:`,
+  });
   const metas = vazia();
-  DIAS.forEach((d) => { metas[d.k] = bruta[d.k].map((m) => limpa(m, `${chave}:`)); });
-  return { chave, metas, pendentes: [], editada: false, geracao: 0 };
+  DIAS.forEach((d) => { metas[d.k] = dias[d.k].map((m) => limpa(comConteudo(ctx, m))); });
+  return { chave, metas, pendentes: [], editada: false, geracao: 0, motorVersao: 2, semTempo: resumo.materiasSemTempo };
 }
 
 /* Semana válida para hoje. Na virada, o que ficou por fazer da semana que
@@ -79,7 +101,7 @@ export function semanaVigente(est, ctx, hojeIso) {
 
 /* Revisões vencidas que não estão na semana atual (de semanas anteriores).
    A feita hoje continua na lista, marcada, até o fim do dia. */
-export function revisoesAtrasadas(revisoes, hojeIso, est) {
+export function revisoesAtrasadas(revisoes, hojeIso, est, duracao) {
   const naSemana = new Set(DIAS.flatMap((d) => est?.metas?.[d.k] || []).filter((m) => m.revisaoId).map((m) => `${m.revisaoId}|${m.dia}`));
   const out = [];
   (revisoes || []).forEach((r) => (r.sessoes || []).forEach((s) => {
@@ -88,7 +110,7 @@ export function revisoesAtrasadas(revisoes, hojeIso, est) {
     if (s.status !== "agendada" && !feitaHoje) return;
     out.push({
       id: idRevisaoAvulsa(r.id, s.dia), tipo: "revisao", revisaoId: r.id, dia: s.dia, materiaId: r.materiaId,
-      topicoId: r.topicoId, subtopicoId: r.subtopicoId || null, itemId: r.itemId, minutos: r.duracaoMin || 20,
+      topicoId: r.topicoId, subtopicoId: r.subtopicoId || null, itemId: r.itemId, minutos: duracaoDa(duracao, r),
       done: feitaHoje, ...(feitaHoje ? { feitoEm: hojeIso, sessaoId: s.sessaoId || null } : {}),
       origem: `revisão de ${fmtDataCurta(s.dia)}`, avulsa: true,
     });
@@ -103,9 +125,10 @@ export function lerIdRevisaoAvulsa(id) {
 }
 
 /* Deixa as revisões da semana iguais às agendadas: entra a que foi agendada
-   para esta semana (de hoje em diante) e sai a meta aberta cuja sessão de
-   revisão deixou de estar agendada. Devolve o mesmo objeto se nada mudou. */
-export function sincronizarRevisoes(est, revisoes, hojeIso) {
+   para esta semana (de hoje em diante), sai a meta aberta cuja sessão de
+   revisão deixou de estar agendada, e a aberta acompanha a duração do peso
+   atual da matéria. Devolve o mesmo objeto se nada mudou. */
+export function sincronizarRevisoes(est, revisoes, hojeIso, duracao) {
   const fim = somarDias(est.chave, 6);
   const naSemana = new Map();
   (revisoes || []).forEach((r) => (r.sessoes || []).forEach((s) => {
@@ -119,6 +142,12 @@ export function sincronizarRevisoes(est, revisoes, hojeIso) {
       const ok = naSemana.get(`${m.revisaoId}|${m.dia}`)?.s.status === "agendada";
       if (!ok) mudou = true;
       return ok;
+    }).map((m) => {
+      if (m.tipo !== "revisao" || m.done || !m.revisaoId) return m;
+      const min = duracaoDa(duracao, naSemana.get(`${m.revisaoId}|${m.dia}`).r);
+      if (min === m.minutos) return m;
+      mudou = true;
+      return { ...m, minutos: min };
     });
   });
   const presentes = new Set(DIAS.flatMap((d) => metas[d.k]).filter((m) => m.revisaoId).map((m) => `${m.revisaoId}|${m.dia}`));
@@ -126,7 +155,7 @@ export function sincronizarRevisoes(est, revisoes, hojeIso) {
     if (s.status !== "agendada" || s.dia < hojeIso || presentes.has(chave)) return;
     metas[chaveDoDia(s.dia)].unshift({
       id: `${est.chave}:rv-${r.id}-${s.dia}`, tipo: "revisao", revisaoId: r.id, dia: s.dia, materiaId: r.materiaId,
-      topicoId: r.topicoId || null, subtopicoId: r.subtopicoId || null, itemId: r.itemId || null, minutos: r.duracaoMin || 20, done: false,
+      topicoId: r.topicoId || null, subtopicoId: r.subtopicoId || null, itemId: r.itemId || null, minutos: duracaoDa(duracao, r), done: false,
     });
     mudou = true;
   });
@@ -136,7 +165,7 @@ export function sincronizarRevisoes(est, revisoes, hojeIso) {
 /* Metas de hoje e atrasadas. Atrasadas: pendências de semanas anteriores,
    metas de dias que já passaram nesta semana e revisões vencidas. Uma meta
    feita hoje continua visível até o fim do dia. */
-export function listasDoDia(est, hojeIso, revisoes = []) {
+export function listasDoDia(est, hojeIso, revisoes = [], duracao) {
   const k = chaveDoDia(hojeIso);
   const h = idxDia(k);
   const visivel = (m) => !m.done || m.feitoEm === hojeIso;
@@ -144,7 +173,7 @@ export function listasDoDia(est, hojeIso, revisoes = []) {
   const atrasadas = [
     ...(est.pendentes || []).filter(visivel),
     ...DIAS.slice(0, h).flatMap((d) => (est.metas[d.k] || []).filter(visivel).map((m) => ({ ...m, origem: m.origem || d.nome.toLowerCase(), diaOrigem: datas[d.k] }))),
-    ...revisoesAtrasadas(revisoes, hojeIso, est),
+    ...revisoesAtrasadas(revisoes, hojeIso, est, duracao),
   ];
   return { hoje: hojeIso, metasHoje: est.metas[k] || [], atrasadas };
 }
@@ -176,39 +205,93 @@ export function marcarMeta(est, id, { done, hojeIso, sessaoId, conteudo }) {
   return m;
 }
 
-export function moverMeta(est, id, de, para) {
-  const i = (est.metas[de] || []).findIndex((m) => m.id === id);
-  if (i < 0 || de === para) return false;
-  const [meta] = est.metas[de].splice(i, 1);
-  est.metas[para].push(meta);
+/* Leva uma meta aberta para outro dia da MESMA semana, de hoje em diante
+   (antecipando ou adiando). Serve também para a meta atrasada desta semana e
+   para a pendência de semana anterior. `para`: chave do dia ("qua") ou data.
+   Altera a cópia; devolve { ok, motivo } e, numa revisão, { revisao: { revisaoId,
+   de, para } } para o serviço mudar o dia da sessão no mesmo lote. */
+export function moverMeta(est, id, para, hojeIso) {
+  const datas = datasDaSemana(est.chave);
+  const k = /^\d{4}-\d{2}-\d{2}$/.test(String(para)) ? DIAS.find((d) => datas[d.k] === para)?.k : DIAS.find((d) => d.k === para)?.k;
+  if (!k) return { ok: false, motivo: "Só dá para mover dentro da semana atual." };
+  if (datas[k] < hojeIso) return { ok: false, motivo: "Esse dia já passou: o estudo não pode ser feito no passado." };
+  const achada = acharMeta(est, id);
+  if (!achada) return { ok: false, motivo: "Meta não encontrada. A semana pode ter virado; recarregue." };
+  const { meta, onde } = achada;
+  if (meta.done) return { ok: false, motivo: "Meta concluída não muda de dia." };
+  if (onde === k) return { ok: false, motivo: "A meta já está nesse dia." };
+  if (onde === "pendentes") est.pendentes = est.pendentes.filter((m) => m.id !== id);
+  else est.metas[onde] = est.metas[onde].filter((m) => m.id !== id);
+  const r = { ok: true };
+  if (meta.tipo === "revisao" && meta.revisaoId) {
+    r.revisao = { revisaoId: meta.revisaoId, de: meta.dia, para: datas[k] };
+    meta.dia = datas[k];
+  }
+  est.metas[k].push(meta);
+  est.editada = true;
+  return r;
+}
+
+/* Muda a posição de uma meta dentro do dia (setas ou arrastar). */
+export function reordenarNoDia(est, k, id, passo) {
+  const lista = est.metas[k] || [];
+  const i = lista.findIndex((m) => m.id === id);
+  const j = i + passo;
+  if (i < 0 || j < 0 || j >= lista.length) return false;
+  [lista[i], lista[j]] = [lista[j], lista[i]];
   est.editada = true;
   return true;
 }
 
-/* Refaz o que ainda não foi feito de hoje em diante, com a alocação atual do
-   plano. Dias que já passaram e metas feitas ficam como estão; o que já foi
-   feito na semana é descontado da cota de cada matéria. Serve para "voltar à
-   distribuição automática" e para aplicar um plano recalculado. */
-export function reorganizarSemana(est, ctx, hojeIso) {
+/* Base comum da reorganização e do replanejamento: o que fica (dias que já
+   passaram, metas feitas e revisões), quanto de cada matéria já foi usado na
+   semana, e o espaço que sobra de hoje em diante. */
+function baseDaReorganizacao(est, ctx, hojeIso) {
   const h = idxDia(chaveDoDia(hojeIso));
   const passada = hojeIso > somarDias(est.chave, 6);
+  const datas = datasDaSemana(est.chave);
+  const foraDoPlano = (k) => !!ctx.inicio && datas[k] < ctx.inicio;
   const metas = vazia();
-  const usado = {};
-  const cap = {};
+  const usado = {}, ocupado = {}, capacidade = {}, capacidadeCota = {}, revisoesCota = {};
+  const comRevisao = new Set();
   DIAS.forEach((d, i) => {
     const antes = passada || i < h;
-    const manter = (est.metas[d.k] || []).filter((m) => antes || m.done || m.tipo === "revisao");
-    metas[d.k] = manter.map((m) => ({ ...m }));
-    manter.filter((m) => m.tipo !== "revisao" && (m.done || antes)).forEach((m) => { usado[m.materiaId] = (usado[m.materiaId] || 0) + m.minutos; });
-    cap[d.k] = antes ? 0 : Math.max(0, (Number(ctx.disp?.[d.k]) || 0) - somaMin(manter));
+    const manter = (est.metas[d.k] || []).filter((m) => antes || m.done || m.tipo === "revisao").map((m) => ({ ...m }));
+    metas[d.k] = manter;
+    manter.forEach((m) => {
+      if (m.tipo === "revisao") {
+        revisoesCota[d.k] = (revisoesCota[d.k] || 0) + paraBlocos(m.minutos);
+        comRevisao.add(m.materiaId);
+      } else if (m.done || antes) usado[m.materiaId] = (usado[m.materiaId] || 0) + paraBlocos(m.minutos);
+    });
+    ocupado[d.k] = antes ? 0 : paraBlocos(somaMin(manter));
+    capacidadeCota[d.k] = foraDoPlano(d.k) ? 0 : Number(ctx.disp?.[d.k]) || 0;
+    capacidade[d.k] = antes ? 0 : capacidadeCota[d.k];
   });
+  return { h, passada, metas, entrada: { materias: ctx.materias || [], capacidade, capacidadeCota, revisoesCota, comRevisao, ocupado, usado, ordemMaterias: ctx.ordemMaterias } };
+}
+
+function juntar(base, dias, ctx, prefixo) {
+  const rank = rankDaOrdem(ctx.ordemMaterias, ctx.materias || []);
+  const metas = vazia();
+  DIAS.forEach((d, i) => {
+    const novas = dias[d.k].map((m) => ({ ...limpa(comConteudo(ctx, m), prefixo), ...(m.replanejada ? { replanejada: true } : {}) }));
+    metas[d.k] = base.passada || i < base.h ? base.metas[d.k] : ordenarDia([...base.metas[d.k], ...novas], rank);
+  });
+  return metas;
+}
+
+/* Refaz o que ainda não foi feito de hoje em diante, com o motor. Dias que já
+   passaram e metas feitas ficam como estão; o que já foi feito (ou ficou em
+   dias passados) é descontado da cota de cada matéria. Serve para "voltar ao
+   automático" e para aplicar um plano alterado. */
+export function reorganizarSemana(est, ctx, hojeIso) {
+  const base = baseDaReorganizacao(est, ctx, hojeIso);
   const geracao = (est.geracao || 0) + 1;
-  const ciclo = {
-    alocacoes: (ctx.ciclo?.alocacoes || []).map((a) => ({ ...a, minutosSemanais: Math.max(0, (a.minutosSemanais || 0) - (usado[a.materiaId] || 0)) })),
-  };
-  const bruta = gerarSemana(ciclo, cap, [], { conteudoDaVez: ctx.conteudoDaVez });
-  DIAS.forEach((d) => bruta[d.k].forEach((m) => metas[d.k].push(limpa(m, `${est.chave}:g${geracao}:`))));
-  return { ...est, metas, editada: false, geracao };
+  const { dias, resumo } = planejarSemana({ ...base.entrada, prefixo: "" });
+  const metas = juntar(base, dias, ctx, `${est.chave}:g${geracao}:`);
+  DIAS.forEach((d) => { metas[d.k] = metas[d.k].map(({ replanejada: _r, ...m }) => m); });
+  return { ...est, metas, editada: false, geracao, motorVersao: 2, semTempo: resumo.materiasSemTempo };
 }
 
 /* "Preciso de mais tempo": sessão extra no dia seguinte com mais folga (no
@@ -225,29 +308,39 @@ export function adicionarTempoExtra(est, ctx, { materiaId, topicoId, subtopicoId
   return destino;
 }
 
-/* Replanejamento das pendências dentro da semana (motor do núcleo). */
+/* Replanejamento: as pendências de semanas anteriores entram primeiro no que
+   resta da semana, e depois o que falta da cota de cada matéria. */
 export function previaReplanejamento(est, ctx, hojeIso) {
   const pendentes = (est.pendentes || []).filter((m) => !m.done);
-  const semanaAtual = Object.fromEntries(DIAS.map((d) => [d.k, (est.metas[d.k] || []).map((m) => ({ ...m, materia: m.materiaId }))]));
-  const r = recalcularPlanoInteligente(ctx.ciclo, ctx.disp, semanaAtual, pendentes.map((m) => ({ ...m, materia: m.materiaId })), ctx.revisoes, {
-    hoje: chaveDoDia(hojeIso), semana: est.chave, conteudoDaVez: ctx.conteudoDaVez,
-  });
-  comDiaDaRevisao(r.semana, ctx, est.chave);
-  return r;
+  const pendencias = {};
+  pendentes.forEach((m) => { pendencias[m.materiaId] = (pendencias[m.materiaId] || 0) + Math.max(1, Math.ceil((m.minutos || 0) / BLOCO_MIN)); });
+  const base = baseDaReorganizacao(est, ctx, hojeIso);
+  const { dias, resumo } = planejarSemana({ ...base.entrada, pendencias, prefixo: "" });
+  DIAS.forEach((d) => dias[d.k].forEach((m) => { if (m.tipo === "ciclo") m.replanejada = true; }));
+  const geracao = (est.geracao || 0) + 1;
+  const semana = juntar(base, dias, ctx, `${est.chave}:p${geracao}:`);
+  const naoCouberam = Object.entries(resumo.pendenciasSemEspaco).map(([materiaId, b]) => ({ materiaId, minutos: b * BLOCO_MIN }));
+  const novas = DIAS.flatMap((d) => semana[d.k]).filter((m) => m.replanejada);
+  return {
+    semana,
+    resumo: {
+      totalRealocado: somaMin(novas), materiasFundidas: 0, qtdPendencias: pendentes.length,
+      totalRevisoes: somaMin(DIAS.flatMap((d) => semana[d.k]).filter((m) => m.tipo === "revisao")),
+      naoCouberam, minutosSemEspaco: somaMin(naoCouberam), materiasSemTempo: resumo.materiasSemTempo,
+    },
+  };
 }
 
 export function aplicarReplanejamento(est, { semana, resumo }, hojeIso) {
   const geracao = (est.geracao || 0) + 1;
   const metas = vazia();
-  DIAS.forEach((d) => {
-    metas[d.k] = (semana[d.k] || []).map((m) => (String(m.id).startsWith(`${est.chave}:`) ? limpa(m, "") : limpa(m, `${est.chave}:p${geracao}:`)));
-  });
+  DIAS.forEach((d) => { metas[d.k] = (semana[d.k] || []).map((m) => limpa(m)); });
   const sobras = (resumo.naoCouberam || []).map((x, i) => ({
     id: `${est.chave}:s${geracao}-${i}`, tipo: "ciclo", materiaId: x.materiaId, minutos: x.minutos, done: false,
     topicoId: null, subtopicoId: null, itemId: null, origem: "sem espaço na semana",
   }));
   const feitasHoje = (est.pendentes || []).filter((m) => m.done && m.feitoEm === hojeIso);
-  return { ...est, metas, pendentes: [...feitasHoje, ...sobras], editada: false, geracao };
+  return { ...est, metas, pendentes: [...feitasHoje, ...sobras], editada: false, geracao, motorVersao: 2 };
 }
 
 /* Conteúdo mostrado numa meta: a aberta segue o progresso; a feita e a

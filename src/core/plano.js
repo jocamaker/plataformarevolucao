@@ -1,8 +1,12 @@
 /* Plano de estudos: modelo (plano geral) → plano individual → itens.
 
    Modelo (plano geral, do moderador) e plano individual têm a mesma forma:
-     materias: [{ materiaId, minutosSemanais, maxSessao, prioridade, ritmo,
+     materias: [{ materiaId, peso, maxSessao, ritmo, ativa,
                   topicos: [{ topicoId, cargaMin?, subtopicos: [{ subtopicoId, cargaMin? }] }] }]
+   peso (1 a 3), ativa, maxSessao e ritmo da matéria são só do moderador; o
+   tempo semanal de cada matéria sai do motor (motor.js), na proporção dos
+   pesos, e fica em alocacaoSemanal. minutosSemanais e prioridade de
+   documentos antigos ficam onde estão, sem efeito.
    A ordem dos arrays é a sequência recomendada. O plano individual é uma
    CÓPIA editável do modelo (com modeloId/modeloVersao para rastrear a origem):
    mudar o plano de um aluno não mexe no modelo nem nos outros alunos.
@@ -17,6 +21,8 @@
 
 import { DIAS, DISP_PADRAO, dataParaDiaSemana } from "./nucleo.js";
 import { diasEntre, somarDias } from "./datas.js";
+import { BLOCO_MIN, DURACOES_META, MAX_SESSAO_PADRAO, deBlocos, ehMultiploDoBloco, paraBlocos } from "./blocos.js";
+import { cotaDaSemana } from "./motor.js";
 
 export const RITMOS = [
   { id: "lenta", nome: "Lenta", multiplicador: 0.8 },
@@ -26,12 +32,27 @@ export const RITMOS = [
 ];
 export const nomeRitmo = (mult = 1) => RITMOS.find((r) => Math.abs(r.multiplicador - mult) < 0.001)?.nome || `${String(mult).replace(".", ",")}×`;
 
-export const PRIORIDADES = [{ id: 1, nome: "Alta" }, { id: 2, nome: "Média" }, { id: 3, nome: "Baixa" }];
+/* Peso da matéria: só o moderador define. Mais peso, mais tempo na semana
+   (proporção 1 : 2 : 3) e em mais dias. */
+export const PESOS = [
+  { id: 1, nome: "Baixa", descricao: "Baixa dificuldade", efeito: "Menor frequência" },
+  { id: 2, nome: "Média", descricao: "Média dificuldade", efeito: "Frequência intermediária" },
+  { id: 3, nome: "Alta", descricao: "Alta dificuldade", efeito: "Maior frequência" },
+];
+export const PESO_PADRAO = 2;
+export const pesoValido = (p) => p === 1 || p === 2 || p === 3;
+export const pesoDe = (m) => (pesoValido(m?.peso) ? m.peso : PESO_PADRAO);
+export const nomePeso = (p) => { const x = PESOS.find((y) => y.id === p); return x ? `${x.id} · ${x.nome}` : String(p ?? "—"); };
+
+// revisão: 30 min para peso 1; 60 min para peso 2 ou 3 (não é configurável)
+export const duracaoRevisao = (peso) => deBlocos(peso === 1 ? 1 : 2);
 
 export const PERMISSOES_ALUNO = [
   { id: "concluirItens", nome: "Marcar conteúdos como concluídos e reabrir" },
   { id: "reordenar", nome: "Mudar a ordem dos tópicos dentro de cada matéria" },
-  { id: "disponibilidade", nome: "Ajustar as horas livres de cada dia" },
+  { id: "disponibilidade", nome: "Ajustar o tempo de estudo de cada dia" },
+  { id: "moverMetas", nome: "Mudar o dia das metas dentro da semana" },
+  { id: "ordemMaterias", nome: "Escolher a ordem das matérias no dia" },
   { id: "ritmo", nome: "Mudar o ritmo do plano" },
   { id: "recalcular", nome: "Recalcular o plano" },
 ];
@@ -45,7 +66,10 @@ export const MODALIDADES = [
   { id: "revisao", nome: "Revisão final" },
 ];
 
-export const REVISAO_PADRAO = { intervalos: [7, 15, 30], duracaoMin: 20 };
+export const REVISAO_PADRAO = { intervalos: [7, 15, 30] };
+// tempo de estudo por dia que o aluno pode escolher (só o moderador muda)
+export const LIMITES_PADRAO = { minDia: 0, maxDia: 480 };
+export const limitesDe = (plano) => ({ ...LIMITES_PADRAO, ...(plano?.limitesTempo || {}) });
 export const CARGA_PADRAO = 60;
 
 export const STATUS_ITEM = {
@@ -56,7 +80,7 @@ export const STATUS_ITEM = {
 };
 
 export const idItem = (topicoId, subtopicoId) => subtopicoId || `t:${topicoId}`;
-const arred5 = (n) => Math.ceil(n / 5) * 5;
+const arredBlocoAcima = (n) => Math.ceil(n / BLOCO_MIN) * BLOCO_MIN;
 
 /* ---------- Leitura ---------- */
 
@@ -86,7 +110,7 @@ export function itensDoPlano(plano, ind) {
       const carga = t.cargaMin ?? topico.cargaMin ?? CARGA_PADRAO;
       itens.push({
         materiaId: m.materiaId, topicoId: t.topicoId, subtopicoId: null, itemId: idItem(t.topicoId),
-        prioridade: m.prioridade ?? 2, posMateria, posTopico, posSub: 0, carga, duracao: Math.max(5, Math.round(carga / fator)),
+        peso: pesoDe(m), posMateria, posTopico, posSub: 0, carga, duracao: Math.max(5, Math.round(carga / fator)),
         subtopicos: (t.subtopicos || []).map((x) => x.subtopicoId).filter((id) => ind.subtopico(id)),
       });
     });
@@ -140,39 +164,85 @@ export const capacidadeSemanal = (disp) => DIAS.reduce((s, d) => s + (Number(dis
 
 /* ---------- Alocação semanal e cronograma ---------- */
 
-/* Minutos por semana de cada matéria. Com data-alvo, cada matéria recebe ao
-   menos o necessário para terminar a tempo; se não couber na disponibilidade,
-   a prioridade decide: as de prioridade alta são atendidas primeiro. */
+/* Matérias que entram no motor: as ativas (e que existem na estrutura), com
+   peso, duração máxima da meta, posição no edital e se ainda têm conteúdo
+   pendente. */
+export function materiasDoMotor(plano, ind, itens = itensDoPlano(plano, ind), progresso = {}) {
+  const pendente = new Set(itens.filter((it) => !estadoItem(it, progresso).concluido).map((it) => it.materiaId));
+  return (plano?.materias || [])
+    .map((m, pos) => ({ m, pos }))
+    .filter(({ m }) => ind.materia(m.materiaId) && m.ativa !== false)
+    .map(({ m, pos }) => ({ materiaId: m.materiaId, peso: pesoDe(m), maxSessao: m.maxSessao || MAX_SESSAO_PADRAO, pos, pendente: pendente.has(m.materiaId) }));
+}
+
+/* Mínimo semanal: um bloco por matéria ativa com conteúdo pendente. */
+export function minimoSemanal(plano, ind, progresso = {}) {
+  return deBlocos(materiasDoMotor(plano, ind, itensDoPlano(plano, ind), progresso).filter((m) => m.pendente).length);
+}
+
+/* Validação do tempo de estudo por dia: múltiplos de 30, dentro dos limites
+   do moderador e somando ao menos o mínimo semanal. Devolve { campo: erro }. */
+export function validarDisponibilidade(disp, limites = LIMITES_PADRAO, minimo = 0) {
+  const erros = {};
+  const { minDia, maxDia } = { ...LIMITES_PADRAO, ...(limites || {}) };
+  DIAS.forEach((d) => {
+    const v = disp?.[d.k];
+    if (!ehMultiploDoBloco(v)) erros[d.k] = "Use passos de 30 min.";
+    else if (v < minDia || v > maxDia) erros[d.k] = `Entre ${fmtHoras(minDia)} e ${fmtHoras(maxDia)} por dia.`;
+  });
+  if (!Object.keys(erros).length && capacidadeSemanal(disp) < minimo) {
+    erros.disponibilidade = `Seu tempo semanal precisa ser de pelo menos ${fmtHoras(minimo)} para caber ao menos um bloco de cada matéria`;
+  }
+  return erros;
+}
+const fmtHoras = (min) => { const h = Math.floor(min / 60), m = min % 60; return h && m ? `${h}h${String(m).padStart(2, "0")}` : h ? `${h} h` : `${m} min`; };
+
+export function validarLimites(limites) {
+  const erros = {};
+  const { minDia, maxDia } = limites || {};
+  if (!ehMultiploDoBloco(minDia)) erros.minDia = "Use passos de 30 min.";
+  if (!ehMultiploDoBloco(maxDia) || maxDia < BLOCO_MIN) erros.maxDia = "Use passos de 30 min (ao menos 30).";
+  if (!Object.keys(erros).length && minDia > maxDia) erros.maxDia = "O máximo não pode ser menor que o mínimo.";
+  return erros;
+}
+
+/* Divisão da semana pelos pesos, com o bloco mínimo (sem revisões): o mesmo
+   cálculo do motor, para o Edital, a página de pesos e as prévias.
+   materias: saída de materiasDoMotor (ou equivalente). → { [materiaId]: min } */
+export function divisaoPorPeso(materias, minutosSemana) {
+  const { blocos, semTempo } = cotaDaSemana(paraBlocos(minutosSemana), materias);
+  return { minutos: Object.fromEntries(Object.entries(blocos).map(([id, b]) => [id, deBlocos(b)])), semTempo };
+}
+
+/* Minutos por semana de cada matéria: a repartição por peso do motor sobre a
+   capacidade semanal (blocos de cada dia). Com data-alvo, calcula quanto
+   cada matéria precisaria por semana e devolve em emRisco as que não terminam
+   a tempo; os pesos não mudam sozinhos (quem decide é o moderador). */
 export function calcularAlocacao(plano, itens, progresso, hojeIso) {
-  const capacidade = capacidadeSemanal(plano.disponibilidade);
+  const disp = plano.disponibilidade || {};
+  const capacidade = DIAS.reduce((s, d) => s + deBlocos(paraBlocos(disp[d.k])), 0);
   const restante = {};
   itens.forEach((it) => { restante[it.materiaId] = (restante[it.materiaId] || 0) + estadoItem(it, progresso).restante; });
   const semanasRestantes = plano.dataAlvo ? Math.max(1, diasEntre(hojeIso, plano.dataAlvo) / 7) : null;
+  const materias = (plano.materias || [])
+    .map((m, pos) => ({ m, pos }))
+    .filter(({ m }) => m.ativa !== false)
+    .map(({ m, pos }) => ({ materiaId: m.materiaId, peso: pesoDe(m), pos, pendente: (restante[m.materiaId] || 0) > 0 }));
+  const { minutos: alocacao, semTempo } = divisaoPorPeso(materias, capacidade);
 
-  const pedidos = (plano.materias || []).filter((m) => m.ativa !== false).map((m, i) => {
+  const necessario = Object.fromEntries(materias.map((m) => {
     const falta = restante[m.materiaId] || 0;
-    const necessario = semanasRestantes && falta ? arred5(falta / semanasRestantes) : 0;
-    return { m, i, falta, necessario, quer: falta > 0 ? Math.max(m.minutosSemanais || 0, necessario) : 0 };
-  });
-
-  const alocacao = {};
-  let livre = capacidade;
-  [1, 2, 3].forEach((prio) => {
-    const grupo = pedidos.filter((p) => (p.m.prioridade ?? 2) === prio);
-    const soma = grupo.reduce((s, p) => s + p.quer, 0);
-    const escala = soma > livre ? livre / soma : 1;
-    grupo.forEach((p) => { alocacao[p.m.materiaId] = Math.floor((p.quer * escala) / 5) * 5; });
-    livre -= grupo.reduce((s, p) => s + alocacao[p.m.materiaId], 0);
-  });
-
-  const necessarioTotal = pedidos.reduce((s, p) => s + p.necessario, 0);
+    return [m.materiaId, semanasRestantes && falta ? arredBlocoAcima(falta / semanasRestantes) : 0];
+  }));
+  const necessarioTotal = Object.values(necessario).reduce((s, v) => s + v, 0);
   return {
     alocacao,
     capacidade,
     semanasRestantes,
     necessarioTotal,
     faltaSemanal: semanasRestantes ? Math.max(0, necessarioTotal - capacidade) : 0,
-    emRisco: pedidos.filter((p) => semanasRestantes && alocacao[p.m.materiaId] < p.necessario).map((p) => p.m.materiaId),
+    emRisco: semanasRestantes ? materias.filter((m) => (alocacao[m.materiaId] || 0) < necessario[m.materiaId]).map((m) => m.materiaId) : [],
+    materiasSemTempo: semTempo,
   };
 }
 
@@ -297,32 +367,19 @@ export function calcularAtrasos(itens, progresso, cronograma, hojeIso) {
   };
 }
 
-// Revisões a agendar quando um item é concluído.
-export const revisoesDoItem = (dataConclusao, revisao = REVISAO_PADRAO) =>
-  (revisao.intervalos || []).map((dias) => ({ dataPrevista: somarDias(dataConclusao, dias), duracaoMin: revisao.duracaoMin || 20 }));
+// Revisões a agendar quando um item é concluído (duração pelo peso da matéria).
+export const revisoesDoItem = (dataConclusao, revisao = REVISAO_PADRAO, peso = PESO_PADRAO) =>
+  (revisao?.intervalos || REVISAO_PADRAO.intervalos).map((dias) => ({ dataPrevista: somarDias(dataConclusao, dias), duracaoMin: duracaoRevisao(peso) }));
 
-// Ciclo semanal (formato do motor do núcleo) a partir do plano.
-export function cicloDoPlano(plano, ind) {
-  const alocacoes = (plano?.materias || [])
-    .map((m, i) => ({ m, i }))
-    .filter(({ m }) => ind.materia(m.materiaId) && m.ativa !== false)
-    .sort((a, b) => (a.m.prioridade ?? 2) - (b.m.prioridade ?? 2) || a.i - b.i)
-    .map(({ m }) => ({
-      materiaId: m.materiaId,
-      materiaNome: ind.nomeMateria(m.materiaId),
-      minutosSemanais: plano.alocacaoSemanal?.[m.materiaId] ?? m.minutosSemanais ?? 0,
-      maxSessao: m.maxSessao || 60,
-      ehMateria: true, // o motor não confunde com uma área de mesmo id
-    }));
-  return { alocacoes };
-}
+// Peso atual de uma matéria no plano (para a duração das revisões).
+export const pesoDaMateria = (plano, materiaId) => pesoDe((plano?.materias || []).find((m) => m.materiaId === materiaId));
 
 /* ---------- Criação a partir do modelo ---------- */
 
 export function modeloVazio() {
   return {
     nome: "", descricao: "", vestibularId: "", cursoId: "", modalidade: "extensivo", periodo: "", versao: 1, dataAlvo: null,
-    ritmo: 1, revisao: { ...REVISAO_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [],
+    ritmo: 1, revisao: { ...REVISAO_PADRAO }, limitesTempo: { ...LIMITES_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [], motorVersao: 2,
   };
 }
 
@@ -341,9 +398,12 @@ export function planoDoModelo(modelo, aluno, { hojeIso, disponibilidade } = {}) 
     dataAlvo: modelo.dataAlvo || null,
     inicio: hojeIso,
     disponibilidade: { ...(disponibilidade || DISP_PADRAO) },
-    revisao: structuredClone(modelo.revisao || REVISAO_PADRAO),
+    revisao: { intervalos: [...(modelo.revisao?.intervalos || REVISAO_PADRAO.intervalos)] },
+    limitesTempo: { ...LIMITES_PADRAO, ...(modelo.limitesTempo || {}) },
     permissoesAluno: { ...PERMISSOES_PADRAO, ...(modelo.permissoesAluno || {}) },
     materias: structuredClone(modelo.materias || []),
+    ordemMaterias: [],
+    motorVersao: 2,
     alocacaoSemanal: {},
     cronograma: {},
     fimPrevisto: null,
@@ -387,8 +447,8 @@ export function alterarPlano(plano, ind, op) {
     case "adicionarMateria": {
       if (mat(op.materiaId) || !ind.materia(op.materiaId)) break;
       p.materias.push({
-        materiaId: op.materiaId, minutosSemanais: op.minutosSemanais ?? 120, maxSessao: op.maxSessao ?? 60,
-        prioridade: op.prioridade ?? 2, ritmo: 1, topicos: op.vazia ? [] : topicosCompletos(ind, op.materiaId),
+        materiaId: op.materiaId, peso: pesoValido(op.peso) ? op.peso : PESO_PADRAO, maxSessao: op.maxSessao ?? MAX_SESSAO_PADRAO,
+        ritmo: 1, topicos: op.vazia ? [] : topicosCompletos(ind, op.materiaId),
       });
       registrar(op.tipo, `Adicionou a matéria ${nomeM}`, null, nomeM);
       break;
@@ -407,11 +467,12 @@ export function alterarPlano(plano, ind, op) {
     case "definirMateria": {
       const m = mat(op.materiaId);
       if (!m) break;
-      const rotulos = { minutosSemanais: "horas por semana", maxSessao: "duração de cada meta", prioridade: "prioridade", ritmo: "velocidade", ativa: "aparecimento" };
-      const fmt = (k, v) => (k === "ativa" ? (v === false ? "oculta" : "visível") : k === "prioridade" ? PRIORIDADES.find((p) => p.id === v)?.nome ?? v : k === "ritmo" ? nomeRitmo(v) : v);
+      const rotulos = { peso: "peso", maxSessao: "duração máxima da meta", ritmo: "velocidade", ativa: "aparecimento" };
+      const fmt = (k, v) => (k === "ativa" ? (v === false ? "oculta" : "visível") : k === "peso" ? nomePeso(v) : k === "ritmo" ? nomeRitmo(v) : v);
       Object.entries(op.campos || {}).forEach(([k, v]) => {
-        const atual = k === "ativa" ? m.ativa !== false : m[k];
+        const atual = k === "ativa" ? m.ativa !== false : k === "peso" ? pesoDe(m) : m[k];
         if (!(k in rotulos) || atual === v) return;
+        if ((k === "peso" && !pesoValido(v)) || (k === "maxSessao" && !DURACOES_META.includes(v))) return; // o serviço valida antes
         registrar(op.tipo, `Mudou ${rotulos[k]} de ${nomeM}`, fmt(k, atual ?? null), fmt(k, v));
         m[k] = v;
       });
@@ -476,7 +537,7 @@ export function alterarPlano(plano, ind, op) {
       break;
     }
     case "definirPlano": {
-      const rotulos = { nome: "nome do plano", ritmo: "ritmo", dataAlvo: "data-alvo", disponibilidade: "horas livres por dia", revisao: "revisões", permissoesAluno: "permissões do aluno", vestibularId: "vestibular", cursoId: "curso", modalidade: "modalidade", periodo: "período", versao: "versão", descricao: "descrição" };
+      const rotulos = { nome: "nome do plano", ritmo: "ritmo", dataAlvo: "data-alvo", disponibilidade: "tempo de estudo por dia", limitesTempo: "limites de tempo por dia", ordemMaterias: "ordem das matérias", revisao: "revisões", permissoesAluno: "permissões do aluno", vestibularId: "vestibular", cursoId: "curso", modalidade: "modalidade", periodo: "período", versao: "versão", descricao: "descrição" };
       Object.entries(op.campos || {}).forEach(([k, v]) => {
         if (!(k in rotulos) || JSON.stringify(p[k]) === JSON.stringify(v)) return;
         const fmt = (x) => (k === "ritmo" ? nomeRitmo(x) : x);
