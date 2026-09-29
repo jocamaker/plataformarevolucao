@@ -8,12 +8,17 @@
    3. Repartição: os blocos livres da semana (R) vão para as matérias ativas
       com conteúdo pendente, na proporção dos pesos, pelo método dos maiores
       restos. Desempate: maior peso, depois a posição no edital.
-   4. Bloco mínimo: toda matéria ativa com conteúdo pendente aparece ao menos
-      uma vez na semana (uma revisão conta); quem ficou sem bloco recebe 1,
-      tirado da que ficou com mais.
-   5. Metas: os blocos de cada matéria viram metas de até maxSessao, iguais.
+   4. Mínimo: toda matéria ativa com conteúdo pendente aparece ao menos uma
+      vez na semana (uma revisão conta). Meta de estudo tem de 2 a 6 blocos
+      (60 a 180 min; 30 min só em revisão): matéria com 1 bloco solto o perde
+      para uma que o use; quem ficou abaixo de 2 recebe o que falta, tirado
+      da que ficou com mais.
+   5. Metas: os blocos de cada matéria viram metas de 2 blocos até maxSessao,
+      iguais.
    6. Dias: rodadas intercaladas (maior peso primeiro); cada meta vai para o
       dia com mais blocos livres que a comporte e ainda não tenha a matéria.
+      O que sobrar de um dia é preenchido aumentando as metas daquele dia (até
+      o máximo de cada uma) ou com uma meta nova de 2 blocos ou mais.
    7. Ordem no dia: revisões, depois a ordem do aluno, depois o edital.
 
    Tudo é determinístico: mesma entrada, mesma saída (ids com a chave da
@@ -23,7 +28,9 @@
    só reordenando a lista). */
 
 import { DIAS } from "./nucleo.js";
-import { deBlocos, paraBlocos } from "./blocos.js";
+import { MIN_BLOCOS_META, deBlocos, paraBlocos } from "./blocos.js";
+
+const MIN = MIN_BLOCOS_META;
 
 const pesoDe = (m) => (m.peso === 1 || m.peso === 2 || m.peso === 3 ? m.peso : 2);
 
@@ -43,23 +50,41 @@ export function repartirPorPeso(R, materias) {
   return blocos;
 }
 
-/* Passo 4. Toda matéria pendente aparece ao menos uma vez. comRevisao: ids
-   com revisão na semana (a revisão conta como o bloco). Quem cede é a que
-   ficou com mais blocos; no empate, a de menor peso e depois a mais ao fim
-   do edital. Uma matéria só cede o último bloco se tiver revisão. */
+/* Passo 4. Toda matéria pendente aparece ao menos uma vez na semana, com uma
+   meta de estudo de pelo menos 2 blocos (60 min) ou com uma revisão
+   (comRevisao). Blocos soltos (matéria com 1 só) vão para um fundo comum;
+   as matérias sem o mínimo, da de maior peso para a de menor, pegam dele e,
+   faltando, da que ficou com mais blocos (no empate, a de menor peso e depois
+   a mais ao fim do edital), que precisa continuar com ao menos 2. O que
+   sobrar do fundo vai para a matéria com mais blocos. */
 export function garantirMinimo(blocos, materias, comRevisao = new Set()) {
   const out = { ...blocos };
-  const semTempo = [];
   const pendentes = materias.filter((m) => m.pendente !== false);
-  pendentes.forEach((m) => {
-    if (out[m.materiaId] > 0 || comRevisao.has(m.materiaId)) return;
-    const doador = pendentes
-      .filter((d) => d.materiaId !== m.materiaId && out[d.materiaId] > (comRevisao.has(d.materiaId) ? 0 : 1))
-      .sort((a, b) => out[b.materiaId] - out[a.materiaId] || pesoDe(a) - pesoDe(b) || (b.pos ?? 0) - (a.pos ?? 0))[0];
-    if (!doador) { semTempo.push(m.materiaId); return; }
-    out[doador.materiaId]--;
-    out[m.materiaId] = 1;
+  const porPeso = [...pendentes].sort((a, b) => pesoDe(b) - pesoDe(a) || (a.pos ?? 0) - (b.pos ?? 0));
+  let fundo = 0;
+  porPeso.forEach((m) => { if (out[m.materiaId] > 0 && out[m.materiaId] < MIN) { fundo += out[m.materiaId]; out[m.materiaId] = 0; } });
+  const doador = (exceto) => pendentes
+    .filter((d) => d.materiaId !== exceto && out[d.materiaId] > MIN)
+    .sort((a, b) => out[b.materiaId] - out[a.materiaId] || pesoDe(a) - pesoDe(b) || (b.pos ?? 0) - (a.pos ?? 0))[0];
+  porPeso.forEach((m) => {
+    const id = m.materiaId;
+    if (out[id] >= MIN || comRevisao.has(id)) return;
+    const doFundo = Math.min(fundo, MIN - out[id]);
+    fundo -= doFundo;
+    out[id] += doFundo;
+    while (out[id] < MIN) {
+      const d = doador(id);
+      if (!d) break;
+      out[d.materiaId]--;
+      out[id]++;
+    }
+    if (out[id] < MIN) { fundo += out[id]; out[id] = 0; }
   });
+  if (fundo > 0) {
+    const maior = [...pendentes].sort((a, b) => out[b.materiaId] - out[a.materiaId] || pesoDe(b) - pesoDe(a) || (a.pos ?? 0) - (b.pos ?? 0))[0];
+    if (maior && (out[maior.materiaId] > 0 || fundo >= MIN)) out[maior.materiaId] += fundo;
+  }
+  const semTempo = pendentes.filter((m) => !comRevisao.has(m.materiaId) && out[m.materiaId] < MIN).map((m) => m.materiaId);
   return { blocos: out, semTempo };
 }
 
@@ -68,14 +93,17 @@ export function cotaDaSemana(R, materias, comRevisao) {
   return garantirMinimo(repartirPorPeso(R, materias), materias, comRevisao);
 }
 
-/* Passo 5. n blocos em metas de até max blocos, o mais iguais possível
-   (maiores primeiro): 5 com máximo 2 → [2, 2, 1]. */
+/* Passo 5. n blocos em metas de 2 até max blocos, o mais iguais possível
+   (maiores primeiro): 7 com máximo 3 → [3, 2, 2]. Com máximo 2 e n ímpar,
+   o bloco que não fecha uma meta fica de fora (vai para o preenchimento dos
+   dias); abaixo de 2 blocos não há meta. */
 export function dividirEmMetas(n, max) {
-  if (n <= 0) return [];
-  const teto = Math.max(1, max);
-  const qtd = Math.ceil(n / teto);
-  const base = Math.floor(n / qtd);
-  const extra = n % qtd;
+  const teto = Math.max(MIN, max);
+  const total = teto === MIN && n % MIN ? n - 1 : n;
+  if (total < MIN) return [];
+  const qtd = Math.ceil(total / teto);
+  const base = Math.floor(total / qtd);
+  const extra = total % qtd;
   return Array.from({ length: qtd }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
@@ -96,7 +124,9 @@ export function ordenarDia(metas, rank) {
 }
 
 /* Passo 6. metasPorMateria: [[materiaId, [blocos…]]] na ordem das rodadas.
-   livres: { dia: blocos }. Devolve o que ficou em cada dia e o que não coube. */
+   livres: { dia: blocos }. Meta que não cabe inteira em nenhum dia é
+   dividida em partes de pelo menos 2 blocos. Devolve o que ficou em cada dia
+   e o que não coube. */
 export function distribuirPelosDias(metasPorMateria, livres) {
   const livre = { ...livres };
   const dias = Object.fromEntries(DIAS.map((d) => [d.k, []]));
@@ -112,12 +142,38 @@ export function distribuirPelosDias(metasPorMateria, livres) {
       livre[dia.k] -= b;
       return;
     }
-    if (b > 1) { colocar(id, Math.ceil(b / 2)); colocar(id, Math.floor(b / 2)); return; }
+    if (b >= 2 * MIN) { colocar(id, Math.ceil(b / 2)); colocar(id, Math.floor(b / 2)); return; }
+    if (b > MIN) { colocar(id, MIN); naoCouberam[id] = (naoCouberam[id] || 0) + b - MIN; return; }
     naoCouberam[id] = (naoCouberam[id] || 0) + b;
   };
   const maior = metasPorMateria.reduce((s, [, l]) => Math.max(s, l.length), 0);
   for (let i = 0; i < maior; i++) metasPorMateria.forEach(([id, lista]) => { if (lista[i]) colocar(id, lista[i]); });
   return { dias, livre, naoCouberam };
+}
+
+/* Preenche o que sobrou em cada dia: primeiro aumenta as metas do dia (as
+   da matéria que ficou sem espaço, depois as menores) até o máximo de cada
+   uma; se ainda sobrarem 2 blocos ou mais, entra uma meta nova da matéria de
+   maior peso que ainda não está no dia. Altera `dias` e `livre`. */
+function preencherDias(dias, livre, { maxDe, candidatas, naoCouberam }) {
+  DIAS.forEach((d) => {
+    const lista = dias[d.k];
+    [...lista].sort((a, b) => (naoCouberam[b.materiaId] || 0) - (naoCouberam[a.materiaId] || 0) || a.blocos - b.blocos).forEach((x) => {
+      const cresce = Math.min(livre[d.k], maxDe(x.materiaId) - x.blocos);
+      if (cresce <= 0) return;
+      x.blocos += cresce;
+      livre[d.k] -= cresce;
+      if (naoCouberam[x.materiaId]) naoCouberam[x.materiaId] = Math.max(0, naoCouberam[x.materiaId] - cresce);
+    });
+    while (livre[d.k] >= MIN) {
+      const id = candidatas.find((c) => !lista.some((x) => x.materiaId === c)) || candidatas[0];
+      if (!id) break;
+      const b = Math.min(livre[d.k], maxDe(id));
+      lista.push({ materiaId: id, blocos: b });
+      livre[d.k] -= b;
+      if (naoCouberam[id]) naoCouberam[id] = Math.max(0, naoCouberam[id] - b);
+    }
+  });
 }
 
 /* A semana inteira. Entrada:
@@ -161,12 +217,16 @@ export function planejarSemana(entrada) {
   // 5 e 6: metas por matéria, em rodadas do maior peso para o menor
   // (pendências de semanas anteriores, se houver, vão antes da cota)
   const rodada = [...materias].sort((a, b) => pesoDe(b) - pesoDe(a) || (a.pos ?? 0) - (b.pos ?? 0));
-  const maxDe = (id) => paraBlocos(materias.find((m) => m.materiaId === id)?.maxSessao) || 2;
+  const maxDe = (id) => Math.max(MIN, paraBlocos(materias.find((m) => m.materiaId === id)?.maxSessao) || MIN);
   const idsPend = Object.keys(pendencias).filter((id) => pendencias[id] > 0)
     .sort((a, b) => rodada.findIndex((m) => m.materiaId === a) - rodada.findIndex((m) => m.materiaId === b));
-  const pend = distribuirPelosDias(idsPend.map((id) => [id, dividirEmMetas(pendencias[id], maxDe(id))]), livres);
+  const pend = distribuirPelosDias(idsPend.map((id) => [id, dividirEmMetas(Math.max(MIN, pendencias[id]), Math.max(maxDe(id), 3))]), livres);
   const porMateria = rodada.map((m) => [m.materiaId, dividirEmMetas(restante[m.materiaId], maxDe(m.materiaId))]);
-  const { dias: daCota, naoCouberam } = distribuirPelosDias(porMateria, pend.livre);
+  const { dias: daCota, livre, naoCouberam } = distribuirPelosDias(porMateria, pend.livre);
+  // sobras de cada dia: completa com as matérias que ainda têm conteúdo (nunca além do dia)
+  const candidatas = rodada.filter((m) => m.pendente !== false).map((m) => m.materiaId);
+  const naoCouberamAntes = { ...naoCouberam };
+  preencherDias(daCota, livre, { maxDe, candidatas, naoCouberam });
   const colocadas = Object.fromEntries(DIAS.map((d) => [d.k, [...pend.dias[d.k].map((x) => ({ ...x, replanejada: true })), ...daCota[d.k]]]));
 
   // 7: monta e ordena cada dia
@@ -185,6 +245,6 @@ export function planejarSemana(entrada) {
 
   return {
     dias,
-    resumo: { R, cota, restante, blocosPorMateria, materiasSemTempo: semTempo, sobrecarga, naoCouberam, pendenciasSemEspaco: pend.naoCouberam },
+    resumo: { R, cota, restante, blocosPorMateria, materiasSemTempo: semTempo, sobrecarga, naoCouberam: naoCouberamAntes, pendenciasSemEspaco: pend.naoCouberam },
   };
 }

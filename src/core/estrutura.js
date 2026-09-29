@@ -61,7 +61,7 @@ export const MATERIAS_DO_CURSO = [
   { id: "quimica", nome: "Química", cor: "#3FA99B" },
   { id: "matematica", nome: "Matemática", cor: "#CC5A8A" },
   { id: "linguagens", nome: "Linguagens", cor: "#8A8FD6" },
-  { id: "obras-literarias", nome: "Obras literárias", cor: "#9A7432" },
+  { id: "obras-literarias", nome: "Obras literárias", cor: "#9A7432", vestibulares: ["fuvest", "unicamp"] },
   { id: "filosofia", nome: "Filosofia", cor: "#C9A13A" },
   { id: "sociologia", nome: "Sociologia", cor: "#C9793A" },
   { id: "geografia", nome: "Geografia", cor: "#7FA36B" },

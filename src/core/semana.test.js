@@ -25,9 +25,13 @@ describe("semana", () => {
     expect(est.chave).toBe("2026-09-28");
     expect(new Set(todas(est).map((m) => m.id)).size).toBe(todas(est).length);
     expect(todas(est).every((m) => m.id.startsWith("2026-09-28:") && m.minutos % 30 === 0)).toBe(true);
-    // 840 min = 28 blocos: 3/5 → 16,8 → 17 blocos; 2/5 → 11 blocos
-    expect(min(todas(est).filter((m) => m.materiaId === "biologia"))).toBe(510);
-    expect(min(todas(est).filter((m) => m.materiaId === "quimica"))).toBe(330);
+    // 840 min = 28 blocos: 3/5 → 17 blocos, 2/5 → 11; metas de até 60 min
+    // pedem número par de blocos, e o que sobra de cada dia é preenchido
+    const bio = min(todas(est).filter((m) => m.materiaId === "biologia"));
+    const qui = min(todas(est).filter((m) => m.materiaId === "quimica"));
+    expect(bio + qui).toBe(840);
+    expect(Math.abs(bio - 504)).toBeLessThanOrEqual(60);
+    expect(todas(est).every((m) => m.minutos >= 60)).toBe(true);
   });
 
   it("quem começa no meio da semana não recebe metas nos dias que já passaram", () => {
@@ -43,7 +47,7 @@ describe("semana", () => {
     const passada = est.metas.seg.filter((m) => !m.done);
     const r = reorganizarSemana(est, ctx, "2026-09-29"); // terça
     expect(r.metas.seg).toEqual([feita, ...passada]);
-    expect(min(todas(r).filter((m) => m.materiaId === "biologia"))).toBe(510); // o total da semana continua o da cota
+    expect(min(todas(r).filter((m) => m.materiaId === "biologia"))).toBe(min(todas(est).filter((m) => m.materiaId === "biologia"))); // o total da semana continua o mesmo
   });
 
   it("replanejar leva as pendências para os dias que faltam e não perde o que não coube", () => {

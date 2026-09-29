@@ -21,7 +21,7 @@
 
 import { DIAS, DISP_PADRAO, dataParaDiaSemana } from "./nucleo.js";
 import { diasEntre, somarDias } from "./datas.js";
-import { BLOCO_MIN, DURACOES_META, MAX_SESSAO_PADRAO, deBlocos, ehMultiploDoBloco, paraBlocos } from "./blocos.js";
+import { BLOCO_MIN, DURACOES_META, MAX_SESSAO_PADRAO, MIN_BLOCOS_META, deBlocos, ehMultiploDoBloco, paraBlocos } from "./blocos.js";
 import { cotaDaSemana } from "./motor.js";
 
 export const RITMOS = [
@@ -68,7 +68,21 @@ export const MODALIDADES = [
 
 export const REVISAO_PADRAO = { intervalos: [7, 15, 30] };
 // tempo de estudo por dia que o aluno pode escolher (só o moderador muda)
-export const LIMITES_PADRAO = { minDia: 0, maxDia: 480 };
+export const LIMITES_PADRAO = { minDia: 0, maxDia: 960 }; // até 16 h por dia
+
+/* Matérias que só existem para alguns vestibulares (o documento da matéria
+   pode trazer `vestibulares`; sem ele, vale esta lista). Fora deles a matéria
+   fica como inativa: não gera metas nem aparece para o aluno. */
+export const RESTRICAO_VESTIBULAR = { "obras-literarias": ["fuvest", "unicamp"] };
+export function vestibularesDaMateria(ind, materiaId) {
+  const lista = ind?.materia(materiaId)?.vestibulares;
+  return Array.isArray(lista) && lista.length ? lista : RESTRICAO_VESTIBULAR[materiaId] || null;
+}
+export function materiaPermitida(ind, materiaId, vestibularId) {
+  const lista = vestibularesDaMateria(ind, materiaId);
+  return !lista || !vestibularId || lista.includes(vestibularId);
+}
+export const ativaNoPlano = (plano, m, ind) => m?.ativa !== false && materiaPermitida(ind, m?.materiaId, plano?.vestibularId);
 export const limitesDe = (plano) => ({ ...LIMITES_PADRAO, ...(plano?.limitesTempo || {}) });
 export const CARGA_PADRAO = 60;
 
@@ -102,7 +116,7 @@ export function topicosEmOrdem(plano, m) {
 export function itensDoPlano(plano, ind) {
   const itens = [];
   (plano?.materias || []).forEach((m, posMateria) => {
-    if (!ind.materia(m.materiaId) || m.ativa === false) return;
+    if (!ind.materia(m.materiaId) || !ativaNoPlano(plano, m, ind)) return;
     const fator = (plano.ritmo || 1) * (m.ritmo || 1);
     topicosEmOrdem(plano, m).forEach((t, posTopico) => {
       const topico = ind.topico(t.topicoId);
@@ -171,13 +185,13 @@ export function materiasDoMotor(plano, ind, itens = itensDoPlano(plano, ind), pr
   const pendente = new Set(itens.filter((it) => !estadoItem(it, progresso).concluido).map((it) => it.materiaId));
   return (plano?.materias || [])
     .map((m, pos) => ({ m, pos }))
-    .filter(({ m }) => ind.materia(m.materiaId) && m.ativa !== false)
+    .filter(({ m }) => ind.materia(m.materiaId) && ativaNoPlano(plano, m, ind))
     .map(({ m, pos }) => ({ materiaId: m.materiaId, peso: pesoDe(m), maxSessao: m.maxSessao || MAX_SESSAO_PADRAO, pos, pendente: pendente.has(m.materiaId) }));
 }
 
-/* Mínimo semanal: um bloco por matéria ativa com conteúdo pendente. */
+/* Mínimo semanal: uma meta de estudo (60 min) por matéria ativa com conteúdo pendente. */
 export function minimoSemanal(plano, ind, progresso = {}) {
-  return deBlocos(materiasDoMotor(plano, ind, itensDoPlano(plano, ind), progresso).filter((m) => m.pendente).length);
+  return deBlocos(MIN_BLOCOS_META * materiasDoMotor(plano, ind, itensDoPlano(plano, ind), progresso).filter((m) => m.pendente).length);
 }
 
 /* Validação do tempo de estudo por dia: múltiplos de 30, dentro dos limites
@@ -218,7 +232,7 @@ export function divisaoPorPeso(materias, minutosSemana) {
    capacidade semanal (blocos de cada dia). Com data-alvo, calcula quanto
    cada matéria precisaria por semana e devolve em emRisco as que não terminam
    a tempo; os pesos não mudam sozinhos (quem decide é o moderador). */
-export function calcularAlocacao(plano, itens, progresso, hojeIso) {
+export function calcularAlocacao(plano, itens, progresso, hojeIso, ind) {
   const disp = plano.disponibilidade || {};
   const capacidade = DIAS.reduce((s, d) => s + deBlocos(paraBlocos(disp[d.k])), 0);
   const restante = {};
@@ -226,7 +240,7 @@ export function calcularAlocacao(plano, itens, progresso, hojeIso) {
   const semanasRestantes = plano.dataAlvo ? Math.max(1, diasEntre(hojeIso, plano.dataAlvo) / 7) : null;
   const materias = (plano.materias || [])
     .map((m, pos) => ({ m, pos }))
-    .filter(({ m }) => m.ativa !== false)
+    .filter(({ m }) => (ind ? ativaNoPlano(plano, m, ind) : m.ativa !== false))
     .map(({ m, pos }) => ({ materiaId: m.materiaId, peso: pesoDe(m), pos, pendente: (restante[m.materiaId] || 0) > 0 }));
   const { minutos: alocacao, semTempo } = divisaoPorPeso(materias, capacidade);
 
@@ -289,7 +303,7 @@ export function projetarCronograma(plano, itens, progresso, alocacao, hojeIso, l
    o histórico; só o que falta ganha novas datas. */
 export function recalcularPlano(plano, ind, progresso, hojeIso) {
   const itens = itensDoPlano(plano, ind);
-  const aloc = calcularAlocacao(plano, itens, progresso, hojeIso);
+  const aloc = calcularAlocacao(plano, itens, progresso, hojeIso, ind);
   const proj = projetarCronograma(plano, itens, progresso, aloc.alocacao, hojeIso);
   const cronograma = {};
   let remarcados = 0;
@@ -379,7 +393,7 @@ export const pesoDaMateria = (plano, materiaId) => pesoDe((plano?.materias || []
 export function modeloVazio() {
   return {
     nome: "", descricao: "", vestibularId: "", cursoId: "", modalidade: "extensivo", periodo: "", versao: 1, dataAlvo: null,
-    ritmo: 1, revisao: { ...REVISAO_PADRAO }, limitesTempo: { ...LIMITES_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [], motorVersao: 2,
+    ritmo: 1, revisao: { ...REVISAO_PADRAO }, limitesTempo: { ...LIMITES_PADRAO }, permissoesAluno: { ...PERMISSOES_PADRAO }, materias: [], motorVersao: 3,
   };
 }
 
@@ -403,7 +417,7 @@ export function planoDoModelo(modelo, aluno, { hojeIso, disponibilidade } = {}) 
     permissoesAluno: { ...PERMISSOES_PADRAO, ...(modelo.permissoesAluno || {}) },
     materias: structuredClone(modelo.materias || []),
     ordemMaterias: [],
-    motorVersao: 2,
+    motorVersao: 3,
     alocacaoSemanal: {},
     cronograma: {},
     fimPrevisto: null,

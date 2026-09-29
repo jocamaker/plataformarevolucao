@@ -6,6 +6,7 @@ import {
 import { useApp } from "../../state/AppContext.jsx";
 import { errosDeCampo, useAcao, useMigracaoMotor, useModelos, usePlanosAnteriores } from "../../state/hooks.js";
 import { useVisaoAluno } from "../../state/aluno.js";
+import { MOTOR_VERSAO } from "../../core/migracao.js";
 import { fmtMin } from "../../core/nucleo.js";
 import { fmtDataCurta, fmtDataLonga } from "../../core/datas.js";
 import { metricasAluno } from "../../services/desempenho.js";
@@ -223,7 +224,7 @@ export default function AlunoPainel() {
   const mudarAba = (k) => setParams(k === "geral" ? {} : { aba: k }, { replace: true });
   const [trocar, setTrocar] = useState(false);
   // plano gravado antes do motor de blocos e pesos: converte ao abrir o painel
-  useMigracaoMotor(!!v.planoBruto && v.planoBruto.motorVersao !== 2, id);
+  useMigracaoMotor(!!v.planoBruto && v.planoBruto.motorVersao !== MOTOR_VERSAO, id);
   if (v.carregando) return <Carregando />;
   if (!v.aluno) return <><Link to="/moderador/alunos" className="voltar"><ArrowLeft aria-hidden="true" />Alunos</Link><div className="cartao"><Vazio icone={UserCog} titulo="Aluno não encontrado" /></div></>;
 

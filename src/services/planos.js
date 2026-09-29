@@ -12,7 +12,7 @@
 import { apagarCampo, carimbo, ErroDados, novoId } from "../data/contrato.js";
 import {
   PESO_PADRAO, alterarPlano, estadoItem, idItem, impactoAlteracao, itensDoPlano, limitesDe, minimoSemanal, modeloVazio,
-  pesoDaMateria, pesoDe, pesoValido, planoDoModelo, recalcularPlano, revisoesDoItem, sugerirModelo, validarDisponibilidade,
+  materiaPermitida, pesoDaMateria, pesoDe, pesoValido, planoDoModelo, vestibularesDaMateria, recalcularPlano, revisoesDoItem, sugerirModelo, validarDisponibilidade,
   validarLimites,
 } from "../core/plano.js";
 import { DURACOES_META, MAX_SESSAO_PADRAO } from "../core/blocos.js";
@@ -34,6 +34,8 @@ export function permissaoDaOperacao(op) {
   return null;
 }
 
+const restrita = (ind, id) => `${ind.nomeMateria(id)} é só para ${vestibularesDaMateria(ind, id).map((v) => ind.nomeVestibular(v) || v.toUpperCase()).join(" e ")}.`;
+
 /* Validação das alterações que o core não recusa sozinho: peso, duração da
    meta, limites de tempo, tempo de estudo por dia e ordem das matérias. */
 export function validarOperacao(op, plano, ind, prog = {}) {
@@ -41,8 +43,10 @@ export function validarOperacao(op, plano, ind, prog = {}) {
   if (op.tipo === "definirMateria") {
     const c = op.campos || {};
     if ("peso" in c && !pesoValido(c.peso)) erros.peso = "O peso é 1, 2 ou 3.";
-    if ("maxSessao" in c && !DURACOES_META.includes(c.maxSessao)) erros.maxSessao = "A duração máxima da meta vai de 30 a 180 min, de 30 em 30.";
+    if ("maxSessao" in c && !DURACOES_META.includes(c.maxSessao)) erros.maxSessao = "A duração máxima da meta vai de 60 a 180 min, de 30 em 30.";
+    if (c.ativa === true && !materiaPermitida(ind, op.materiaId, plano?.vestibularId)) erros.ativa = restrita(ind, op.materiaId);
   }
+  if (op.tipo === "adicionarMateria" && !materiaPermitida(ind, op.materiaId, plano?.vestibularId)) erros.materiaId = restrita(ind, op.materiaId);
   if (op.tipo === "definirPlano") {
     const c = op.campos || {};
     if ("limitesTempo" in c) Object.assign(erros, validarLimites(c.limitesTempo));

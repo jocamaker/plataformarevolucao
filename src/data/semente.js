@@ -33,9 +33,9 @@ export const BOAS_VINDAS_PADRAO = {
    curso: Português, Literatura, Redação e Inglês entram em Linguagens. O peso
    de cada matéria sai da incidência do ciclo pela regra da migração (r =
    minutos da matéria ÷ minutos da maior: ≥ 0,75 → 3; ≥ 0,45 → 2; senão 1);
-   matéria que o ciclo não previa entra com peso 1. Obras literárias: ativa
-   com peso 2 só na FUVEST; nas outras jornadas fica inativa (o moderador
-   liga na página de pesos). */
+   matéria que o ciclo não previa entra com peso 1. Obras literárias existe só
+   para FUVEST e UNICAMP (RESTRICAO_VESTIBULAR): ativa com peso 2 nelas e
+   inativa nas outras. */
 export function modelosIniciais(ind) {
   return Object.entries(CICLO_TEMPLATES).map(([vestibularId, t], i) => {
     const porMateria = new Map();
@@ -55,7 +55,7 @@ export function modelosIniciais(ind) {
         peso: obras ? 2 : ciclo ? pesoPelaIncidencia(ciclo.minutos, maior) : 1,
         maxSessao: ciclo ? arredMaxSessao(ciclo.maxSessao) : MAX_SESSAO_PADRAO,
         ritmo: 1,
-        ...(obras && vestibularId !== "fuvest" ? { ativa: false } : {}),
+        ...(obras && !["fuvest", "unicamp"].includes(vestibularId) ? { ativa: false } : {}),
         topicos: ind.topicosDaMateria(m.id).map((tp) => ({ topicoId: tp.id, subtopicos: ind.subtopicosDoTopico(tp.id).map((x) => ({ subtopicoId: x.id })) })),
       };
     };

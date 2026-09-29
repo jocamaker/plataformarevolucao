@@ -12,7 +12,7 @@ import { Barra, Botao, Campo, Carregando, Dialogo, Frase, MensagemErro, Vazio } 
 import { QuadroSemana } from "./Semana.jsx";
 import { TEMPO_EXTRA } from "../../core/blocos.js";
 
-/* "Preciso de mais tempo": 30, 60, 90 ou 120 min (blocos de 30). */
+/* "Preciso de mais tempo": 60, 90 ou 120 min (meta de estudo, blocos de 30). */
 function EscolhaTempoExtra({ valor, aoMudar }) {
   return (
     <span className="segmentado" role="radiogroup" aria-label="Tempo a mais">
@@ -57,7 +57,7 @@ export function MetaLinha({ meta, atrasada, aoAlternar, ocupado, somenteLeitura 
 function ComoEstaConteudo({ popup, fechar, plano, alunoId }) {
   const { s, ind } = useApp();
   const [etapa, setEtapa] = useState("pergunta");
-  const [minutos, setMinutos] = useState(30);
+  const [minutos, setMinutos] = useState(60);
   const [retorno, setRetorno] = useState("");
   const { executar, ocupado, erro } = useAcao();
   const sair = () => { setEtapa("pergunta"); setRetorno(""); fechar(); };
@@ -248,6 +248,7 @@ function RegistrarEstudo({ aberto, fechar, v }) {
                   {aba === "fora"
                     ? <input className="entrada num" type="number" min="5" step="5" value={minutos} onChange={(e) => setMinutos(+e.target.value)} />
                     : <EscolhaTempoExtra valor={TEMPO_EXTRA.includes(minutos) ? minutos : null} aoMudar={setMinutos} />}
+                  {aba === "mais" && !TEMPO_EXTRA.includes(minutos) && <small>Escolha 1h, 1h30 ou 2h.</small>}
                 </Campo>
                 {aba === "fora" && <Campo rotulo="Quando" erro={erros.data}><input className="entrada" type="date" max={hoje} value={data} onChange={(e) => setData(e.target.value)} /></Campo>}
               </div>

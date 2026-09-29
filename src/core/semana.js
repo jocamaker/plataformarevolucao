@@ -73,7 +73,7 @@ export function gerarSemanaNova(ctx, chave) {
   });
   const metas = vazia();
   DIAS.forEach((d) => { metas[d.k] = dias[d.k].map((m) => limpa(comConteudo(ctx, m))); });
-  return { chave, metas, pendentes: [], editada: false, geracao: 0, motorVersao: 2, semTempo: resumo.materiasSemTempo };
+  return { chave, metas, pendentes: [], editada: false, geracao: 0, motorVersao: 3, semTempo: resumo.materiasSemTempo };
 }
 
 /* Semana válida para hoje. Na virada, o que ficou por fazer da semana que
@@ -291,7 +291,7 @@ export function reorganizarSemana(est, ctx, hojeIso) {
   const { dias, resumo } = planejarSemana({ ...base.entrada, prefixo: "" });
   const metas = juntar(base, dias, ctx, `${est.chave}:g${geracao}:`);
   DIAS.forEach((d) => { metas[d.k] = metas[d.k].map(({ replanejada: _r, ...m }) => m); });
-  return { ...est, metas, editada: false, geracao, motorVersao: 2, semTempo: resumo.materiasSemTempo };
+  return { ...est, metas, editada: false, geracao, motorVersao: 3, semTempo: resumo.materiasSemTempo };
 }
 
 /* "Preciso de mais tempo": sessão extra no dia seguinte com mais folga (no

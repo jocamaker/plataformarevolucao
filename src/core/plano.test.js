@@ -129,13 +129,14 @@ describe("alocação, cronograma e recálculo", () => {
 
   it("tempo de estudo por dia: passos de 30, dentro dos limites e com o mínimo semanal", () => {
     const plano = novoPlano();
-    expect(minimoSemanal(plano, ind)).toBe(60); // 2 matérias com conteúdo pendente
-    expect(validarDisponibilidade(DISP, { minDia: 0, maxDia: 480 }, 60)).toEqual({});
+    expect(minimoSemanal(plano, ind)).toBe(120); // 2 matérias com conteúdo pendente, 60 min cada
+    expect(validarDisponibilidade(DISP, { minDia: 0, maxDia: 480 }, 120)).toEqual({});
     expect(validarDisponibilidade({ ...DISP, seg: 45 }, undefined, 60).seg).toMatch(/30 min/);
     expect(validarDisponibilidade({ ...DISP, seg: 510 }, { minDia: 0, maxDia: 480 }, 60).seg).toMatch(/Entre/);
     const pouco = Object.fromEntries(DIAS.map((d) => [d.k, 0]));
     pouco.seg = 30;
-    expect(validarDisponibilidade(pouco, undefined, 60).disponibilidade).toBe("Seu tempo semanal precisa ser de pelo menos 1 h para caber ao menos um bloco de cada matéria");
+    expect(validarDisponibilidade(pouco, undefined, 120).disponibilidade).toBe("Seu tempo semanal precisa ser de pelo menos 2 h para caber ao menos um bloco de cada matéria");
+    expect(validarDisponibilidade({ ...DISP, seg: 960 }, undefined, 120)).toEqual({}); // até 16 h por dia
   });
 
   it("projeta datas dentro dos dias disponíveis e recalcula sem apagar concluídos", () => {

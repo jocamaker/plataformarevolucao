@@ -12,7 +12,7 @@
 
 import { apagarCampo, carimbo, ErroDados, incrementar, novoId } from "../data/contrato.js";
 import { DISP_PADRAO, DIAS } from "../core/nucleo.js";
-import { BLOCO_MIN, TEMPO_EXTRA, arredBloco } from "../core/blocos.js";
+import { BLOCO_MIN, TEMPO_EXTRA, arredBloco, arredMeta } from "../core/blocos.js";
 import {
   conteudoDaVez, distribuirMinutos, duracaoRevisao, estadoItem, itensDoPlano, materiasDoMotor, pesoDaMateria,
 } from "../core/plano.js";
@@ -51,15 +51,16 @@ export function servicoEstudo(ctx) {
 
   const semId = (doc) => { if (!doc) return null; const { id: _i, alunoId: _a, atualizadaEm: _t, ...est } = doc; return est; };
 
-  /* Semana gravada antes do motor de blocos: as metas abertas com minutos
-     fora dos blocos de 30 são refeitas uma vez (reorganizarSemana); metas
-     feitas e sessões ficam como estão (são histórico). */
+  /* Semana gravada por um motor anterior (sem motorVersao 3): as metas
+     abertas vão para durações válidas (estudo de 60 a 180 min, revisão de
+     30 em 30), inclusive as de dias que já passaram e as pendências, e os
+     dias de hoje em diante são refeitos uma vez (reorganizarSemana). Metas
+     feitas e sessões ficam como estão: são histórico. */
   function semanaNoMotorAtual(est, c, hoje) {
-    if (!est || est.motorVersao === 2) return est;
-    const fora = (m) => !m.done && m.minutos % BLOCO_MIN !== 0;
-    const pendentes = (est.pendentes || []).map((m) => (fora(m) ? { ...m, minutos: Math.max(BLOCO_MIN, arredBloco(m.minutos)) } : m));
-    const base = { ...est, pendentes, motorVersao: 2 };
-    return DIAS.some((d) => (est.metas?.[d.k] || []).some(fora)) ? reorganizarSemana(base, c.motor, hoje) : base;
+    if (!est || est.motorVersao === 3) return est;
+    const valida = (m) => (m.done ? m : { ...m, minutos: m.tipo === "revisao" ? Math.max(BLOCO_MIN, arredBloco(m.minutos)) : arredMeta(m.minutos) });
+    const metas = Object.fromEntries(DIAS.map((d) => [d.k, (est.metas?.[d.k] || []).map(valida)]));
+    return reorganizarSemana({ ...est, metas, pendentes: (est.pendentes || []).map(valida), motorVersao: 3 }, c.motor, hoje);
   }
 
   // semana válida hoje (+ revisões em dia) e as operações para gravá-la
@@ -297,11 +298,11 @@ export function servicoEstudo(ctx) {
       return true;
     },
 
-    /* "Preciso de mais tempo": 30, 60, 90 ou 120 min no próximo dia com folga. */
+    /* "Preciso de mais tempo": 60, 90 ou 120 min no próximo dia com folga. */
     async tempoExtra(alunoId, { materiaId, topicoId, subtopicoId, itemId, minutos }) {
       ctx.exigir("registrar:estudo", { alunoId });
       const min = Number(minutos);
-      if (!TEMPO_EXTRA.includes(min)) throw new ErroValidacao({ minutos: "Escolha 30, 60, 90 ou 120 min." });
+      if (!TEMPO_EXTRA.includes(min)) throw new ErroValidacao({ minutos: "Escolha 60, 90 ou 120 min." });
       const c = await contexto(alunoId);
       const { est: vig } = vigente(c, alunoId);
       const est = structuredClone(vig);

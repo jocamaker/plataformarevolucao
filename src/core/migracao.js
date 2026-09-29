@@ -1,5 +1,7 @@
-/* Migração para o motor de blocos e pesos (motorVersao 2). Pura e idempotente:
+/* Migração para o motor de blocos e pesos (motorVersao 3). Pura e idempotente:
    rodar de novo sobre um plano já migrado não muda nada.
+   v2 → v3: meta de estudo de 60 a 180 min (maxSessao de 30 vira 60), limite
+   padrão do dia de 8 h para 16 h e permissões novas ligadas onde faltam.
 
    - peso: quem não tem recebe um, pela incidência antiga (minutosSemanais em
      relação à maior matéria do plano): r ≥ 0,75 → 3; 0,45 ≤ r < 0,75 → 2;
@@ -13,9 +15,10 @@
 
 import { DIAS } from "./nucleo.js";
 import { BLOCO_MIN, DURACOES_META, arredBloco, arredMaxSessao } from "./blocos.js";
-import { LIMITES_PADRAO, minimoSemanal, pesoValido } from "./plano.js";
+import { LIMITES_PADRAO, PERMISSOES_PADRAO, minimoSemanal, pesoValido } from "./plano.js";
 
-export const MOTOR_VERSAO = 2;
+export const MOTOR_VERSAO = 3;
+const LIMITE_ANTIGO = 480; // máximo por dia do motor v2
 
 export function pesoPelaIncidencia(minutos, maior) {
   if (!maior) return 2;
@@ -51,6 +54,9 @@ export function migrarPlanoV2(plano, { minimo = 0 } = {}) {
   const novo = { ...plano, materias: migrarMaterias(plano.materias || []), motorVersao: MOTOR_VERSAO };
   if (plano.revisao) novo.revisao = { intervalos: [...(plano.revisao.intervalos || [7, 15, 30])] };
   if (!plano.limitesTempo) novo.limitesTempo = { ...LIMITES_PADRAO };
+  else if ((plano.motorVersao || 0) < MOTOR_VERSAO && plano.limitesTempo.maxDia === LIMITE_ANTIGO) novo.limitesTempo = { ...plano.limitesTempo, maxDia: LIMITES_PADRAO.maxDia };
+  // permissões criadas depois do plano: ligadas por padrão
+  if (plano.permissoesAluno) novo.permissoesAluno = { ...PERMISSOES_PADRAO, ...plano.permissoesAluno };
   if (plano.disponibilidade) novo.disponibilidade = migrarDisponibilidade(plano.disponibilidade, novo.limitesTempo, minimo);
   const mudou = JSON.stringify(novo) !== JSON.stringify(plano);
   return { plano: mudou ? novo : plano, mudou };

@@ -29,7 +29,7 @@ React 19 + Vite. Dois papéis, **aluno** e **moderador**, sobre dados reais.
 ```bash
 npm install
 npm run dev               # http://localhost:5173
-npm test                  # núcleo, motor, serviços, adaptador local e flashcards (227)
+npm test                  # núcleo, motor, serviços, adaptador local e flashcards (231)
 npm run test:emuladores   # regras de segurança e fluxo completo no Firebase emulado
 npm run build             # gera o site em docs/ (é o que o GitHub Pages publica)
 ```
@@ -49,7 +49,7 @@ No modo local, a primeira carga instala uma demonstração: as 10 matérias do
 curso com tópicos de exemplo (Obras literárias com "Obra 1 (exemplo)" e "Obra
 2 (exemplo)": a lista oficial muda a cada edição e quem cadastra é o
 moderador), 7 jornadas (uma por vestibular, com pesos tirados dos ciclos do
-núcleo; Obras literárias ativa só na FUVEST), o moderador e
+núcleo; Obras literárias só na FUVEST e na UNICAMP), o moderador e
 3 alunos com a jornada aplicada. **Nenhum histórico é inventado**: questões, simulados,
 estudo, redações e avisos começam vazios. Contas (senha `123456`):
 `moderador@curso.com`, `aluno@curso.com` (FUVEST · Medicina),
@@ -114,22 +114,31 @@ O sistema gera sozinho as metas de cada aluno (`src/core/motor.js`, com
 
 - **Bloco de 30 min** (`BLOCO_MIN`): toda meta (de estudo, de revisão, tempo
   extra, replanejada ou pendente) e todo tempo de estudo do dia são múltiplos
-  de 30. A carga dos tópicos e o progresso continuam em minutos.
+  de 30. **Meta de estudo tem de 60 a 180 min** (2 a 6 blocos); 30 min só
+  existe em revisão. O tempo de estudo vai até 16 h por dia (padrão dos
+  limites). A carga dos tópicos e o progresso continuam em minutos.
 - **Pesos 1 a 3** (`PESOS`: 1 · Baixa, 2 · Média, 3 · Alta): os blocos livres
   da semana (tempo de cada dia menos as revisões) vão para as matérias ativas
   com conteúdo pendente, na proporção dos pesos, pelo método dos maiores restos
   (desempate: maior peso, depois a posição no edital). Mudar o tempo do dia
   mantém as proporções. O mesmo cálculo gera `alocacaoSemanal` e as datas do
   Edital.
-- **Bloco mínimo**: toda matéria ativa com conteúdo pendente aparece ao menos
-  uma vez na semana (uma revisão conta); se ficou sem bloco, recebe 1, tirado
-  da que ficou com mais. Sem espaço nem para isso, ela vai em `semTempo` da
+- **Mínimo**: toda matéria ativa com conteúdo pendente aparece ao menos uma
+  vez na semana, com uma meta de 60 min (ou uma revisão); bloco solto de uma
+  matéria vai para quem o use, e quem ficou abaixo de 60 min recebe o que
+  falta, tirado da que ficou com mais. Sem espaço nem para isso, ela vai em `semTempo` da
   semana (aviso no painel do aluno e na semana do aluno).
 - **Metas e dias**: os blocos de cada matéria viram metas de até a duração
   máxima (`maxSessao`, 30 a 180 min), iguais; as matérias se intercalam em
   rodadas (maior peso primeiro) e cada meta vai para o dia com mais espaço que
-  ainda não tem a matéria. No dia: revisões, depois a ordem do aluno, depois o
-  edital. Determinístico (ids com a chave da semana e um índice).
+  ainda não tem a matéria; o que sobra do dia completa as metas daquele dia
+  (até o máximo de cada uma) ou vira uma meta nova de 60 min ou mais. No dia:
+  revisões, depois a ordem do aluno, depois o edital. Determinístico (ids com a
+  chave da semana e um índice).
+- **Matéria só de alguns vestibulares**: `vestibulares` no documento da
+  matéria (ou `RESTRICAO_VESTIBULAR` em `core/plano.js`). Obras literárias é
+  só de FUVEST e UNICAMP: em outro vestibular não gera metas nem aparece, e
+  não pode ser ligada.
 - **Revisões**: 30 min para matéria de peso 1 e 60 min para peso 2 ou 3
   (`duracaoRevisao`), sempre pelo peso atual; entram no seu dia mesmo sem
   espaço (o dia fica sinalizado). O moderador só define os intervalos.
@@ -137,13 +146,17 @@ O sistema gera sozinho as metas de cada aluno (`src/core/motor.js`, com
 | Quem | O quê |
 |---|---|
 | **Moderador** | matérias ativas, peso, duração máxima da meta, velocidade da matéria, limites do tempo por dia (`limitesTempo`), intervalos das revisões e as permissões do aluno |
-| **Aluno** (cada item é uma permissão, ligada por padrão) | tempo de estudo de cada dia (`disponibilidade`, de 30 em 30 dentro dos limites e com o mínimo semanal de 30 min por matéria com conteúdo); dia de cada meta dentro da semana atual, de hoje em diante (`moverMetas`); ordem das matérias no dia e das metas de um dia (`ordemMaterias`) |
+| **Aluno** (cada item é uma permissão, ligada por padrão) | tempo de estudo de cada dia (`disponibilidade`, de 30 em 30 dentro dos limites e com o mínimo semanal de 30 min por matéria com conteúdo); dia de cada meta dentro da semana atual, de hoje em diante (`moverMetas`: arrastar com o mouse ou tocar na meta e depois no dia); ordem das matérias no dia e das metas de um dia (`ordemMaterias`); "preciso de mais tempo" de 60, 90 ou 120 min |
 
 Nada do que o aluno ajusta avisa o moderador. Mudar o tempo grava log; mover
 metas, não.
 
 **Migração** (`core/migracao.js`, `planos.migrarMotor`): automática e
-idempotente, com log `migrarMotor` e `motorVersao: 2`. O peso sai da
+idempotente, com log `migrarMotor` e `motorVersao: 3` (v3: meta de estudo de
+60 a 180 min, limite padrão de 16 h por dia e as permissões novas ligadas em
+planos antigos). A semana gravada por um motor anterior tem as metas abertas
+levadas a durações válidas, inclusive nos dias que já passaram, e é refeita de
+hoje em diante uma vez. O peso sai da
 incidência antiga (minutos da matéria ÷ minutos da maior: ≥ 0,75 → 3;
 ≥ 0,45 → 2; senão 1); tempos e durações vão para o bloco mais próximo;
 `revisao.duracaoMin` sai. As jornadas migram quando o moderador entra; o plano

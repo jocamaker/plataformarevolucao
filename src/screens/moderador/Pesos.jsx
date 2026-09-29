@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Minus, Plus, RefreshCw, Scale } from "lucide-react";
 import { useApp } from "../../state/AppContext.jsx";
 import { useAcao, useModelos, useTodosPlanos } from "../../state/hooks.js";
-import { PESO_PADRAO, pesoDe } from "../../core/plano.js";
+import { PESO_PADRAO, materiaPermitida, pesoDe, vestibularesDaMateria } from "../../core/plano.js";
 import { fmtMin } from "../../core/nucleo.js";
 import { divisaoPrevista, SeletorPeso } from "../comum/Edital.jsx";
 import { CARGA_REFERENCIA } from "./Jornadas.jsx";
@@ -35,7 +35,7 @@ function opsDaColuna(modelo, rascunho) {
 
 function RodapeColuna({ modelo, materias, valor, carga }) {
   const { ind } = useApp();
-  const lista = materias.map((m) => ({ materiaId: m.id, ...valor(modelo, m.id) })).filter((x) => x.ativa);
+  const lista = materias.filter((m) => materiaPermitida(ind, m.id, modelo.vestibularId)).map((m) => ({ materiaId: m.id, ...valor(modelo, m.id) })).filter((x) => x.ativa);
   const div = divisaoPrevista(lista, carga);
   return (
     <div className="pesos-divisao">
@@ -104,6 +104,9 @@ export default function Pesos() {
   const celula = (modelo, materia) => {
     const x = valor(modelo, materia.id);
     const nome = `${ind.nomeMateria(materia.id)} em ${modelo.nome}`;
+    if (!materiaPermitida(ind, materia.id, modelo.vestibularId)) {
+      return <small className="previa-linha">Só para {vestibularesDaMateria(ind, materia.id).map((v) => ind.nomeVestibular(v)).join(" e ")}</small>;
+    }
     return (
       <div className="pesos-celula">
         <label className="interruptor"><input type="checkbox" checked={x.ativa} onChange={(e) => mudar(modelo, materia.id, { ativa: e.target.checked })} aria-label={`${nome}: ativa`} /><span>{x.ativa ? "Ativa" : "Inativa"}</span></label>

@@ -12,7 +12,7 @@ import { DIAS, fmtMin } from "../../core/nucleo.js";
 import { fmtDataCurta, fmtDataLonga } from "../../core/datas.js";
 import {
   CARGA_PADRAO, PERMISSOES_ALUNO, PERMISSOES_PADRAO, PESOS, RITMOS, capacidadeSemanal, divisaoPorPeso, duracaoRevisao, estadoItem, idItem,
-  itensDoPlano, limitesDe, minimoSemanal, nomePeso, nomeRitmo, pesoDe, topicosEmOrdem, validarDisponibilidade, validarLimites,
+  itensDoPlano, LIMITES_PADRAO, limitesDe, materiaPermitida, minimoSemanal, nomePeso, nomeRitmo, pesoDe, topicosEmOrdem, validarDisponibilidade, validarLimites,
 } from "../../core/plano.js";
 import { BLOCO_MIN, DURACOES_META, MAX_SESSAO_PADRAO, deBlocos, passosDeTempo } from "../../core/blocos.js";
 import { useApp } from "../../state/AppContext.jsx";
@@ -132,7 +132,7 @@ export function ResumoEdital({ v, acoes }) {
 
 export function BlocosMaterias({ plano, progresso, selecionada, aoSelecionar, mostrarOcultas = false }) {
   const { ind } = useApp();
-  const materias = (plano.materias || []).filter((m) => ind.materia(m.materiaId) && (mostrarOcultas || m.ativa !== false));
+  const materias = (plano.materias || []).filter((m) => ind.materia(m.materiaId) && materiaPermitida(ind, m.materiaId, plano.vestibularId) && (mostrarOcultas || m.ativa !== false));
   if (!materias.length) return <div className="cartao"><Vazio icone={Settings2} titulo="Nenhuma matéria no edital" /></div>;
   return (
     <div className="blocos-materias">
@@ -369,6 +369,7 @@ export function TabelaIncidencia({ plano, aoAplicar, ocupado, capacidade, jornad
   const { ind } = useApp();
   const [rascunho, setRascunho] = useState({});
   const materias = (plano.materias || []).filter((m) => ind.materia(m.materiaId));
+  const permitida = (id) => materiaPermitida(ind, id, plano.vestibularId);
   // só vale o que ainda difere do plano (depois de aplicar, o rascunho some sozinho)
   const pendentesRasc = Object.fromEntries(materias.map((m) => {
     const orig = camposMateria(m);
@@ -379,7 +380,7 @@ export function TabelaIncidencia({ plano, aoAplicar, ocupado, capacidade, jornad
   const mudar = (m, campos) => setRascunho((r) => ({ ...r, [m.materiaId]: { ...(pendentesRasc[m.materiaId] || {}), ...campos } }));
   const ops = Object.entries(pendentesRasc).map(([materiaId, campos]) => ({ tipo: "definirMateria", materiaId, campos }));
   const fora = ind.materias.filter((m) => !plano.materias?.some((x) => x.materiaId === m.id));
-  const div = divisaoPrevista(materias.map((m) => ({ materiaId: m.materiaId, ...valor(m) })), capacidade || 0, pendentes);
+  const div = divisaoPrevista(materias.filter((m) => permitida(m.materiaId)).map((m) => ({ materiaId: m.materiaId, ...valor(m) })), capacidade || 0, pendentes);
   const daJornada = (id) => jornada?.materias?.find((x) => x.materiaId === id);
   const ajustado = (m, k) => {
     const j = daJornada(m.materiaId);
@@ -421,7 +422,9 @@ export function TabelaIncidencia({ plano, aoAplicar, ocupado, capacidade, jornad
                     </span>
                   </td>
                   <td data-rotulo="Ativa">
-                    <label className="interruptor"><input type="checkbox" checked={x.ativa} onChange={(e) => mudar(m, { ativa: e.target.checked })} aria-label={`${nome} ativa`} /><span>{x.ativa ? "Ativa" : "Inativa"}</span></label>
+                    {permitida(m.materiaId)
+                      ? <label className="interruptor"><input type="checkbox" checked={x.ativa} onChange={(e) => mudar(m, { ativa: e.target.checked })} aria-label={`${nome} ativa`} /><span>{x.ativa ? "Ativa" : "Inativa"}</span></label>
+                      : <small className="etiqueta" title="Matéria restrita a outros vestibulares">não é deste vestibular</small>}
                   </td>
                   <td data-rotulo="Peso"><SeletorPeso valor={x.peso} desabilitado={!x.ativa} rotulo={`Peso de ${nome}`} aoMudar={(peso) => mudar(m, { peso })} /></td>
                   <td data-rotulo="Meta de até">
@@ -468,7 +471,7 @@ export function TempoPorDia({ plano, progresso, podeEditar, aoOperar, ocupado })
   const erros = validarDisponibilidade(disp, lim, minimo);
   const itens = itensDoPlano(plano, ind);
   const pendentes = new Set(itens.filter((it) => !estadoItem(it, progresso || {}).concluido).map((it) => it.materiaId));
-  const div = divisaoPrevista((plano.materias || []).filter((m) => ind.materia(m.materiaId)), total, pendentes);
+  const div = divisaoPrevista((plano.materias || []).filter((m) => ind.materia(m.materiaId) && materiaPermitida(ind, m.materiaId, plano.vestibularId)), total, pendentes);
   const passo = (k, delta) => setDisp((x) => ({ ...x, [k]: Math.min(lim.maxDia, Math.max(lim.minDia, x[k] + delta)) }));
   return (
     <section className="form" aria-labelledby="t-horas">
@@ -507,7 +510,7 @@ export function TempoPorDia({ plano, progresso, podeEditar, aoOperar, ocupado })
 /* Ordem das matérias no dia: setas (toque e teclado) ou arrastar. */
 export function OrdemMaterias({ plano, aoOperar, ocupado }) {
   const { ind } = useApp();
-  const ativas = (plano.materias || []).filter((m) => m.ativa !== false && ind.materia(m.materiaId)).map((m) => m.materiaId);
+  const ativas = (plano.materias || []).filter((m) => m.ativa !== false && ind.materia(m.materiaId) && materiaPermitida(ind, m.materiaId, plano.vestibularId)).map((m) => m.materiaId);
   const inicial = () => {
     const ordem = (plano.ordemMaterias || []).filter((id) => ativas.includes(id));
     return [...ordem, ...ativas.filter((id) => !ordem.includes(id))];
@@ -552,7 +555,7 @@ function RitmoDoPlano({ plano, podeEditar, aoOperar, ocupado }) {
 function LimitesTempo({ plano, aoOperar, ocupado }) {
   const atual = limitesDe(plano);
   const [lim, setLim] = useState(atual);
-  const opcoes = passosDeTempo(0, deBlocos(24));
+  const opcoes = passosDeTempo(0, LIMITES_PADRAO.maxDia);
   const erros = validarLimites(lim);
   return (
     <section className="form" aria-labelledby="t-limites">

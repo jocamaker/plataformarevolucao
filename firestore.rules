@@ -124,11 +124,11 @@ service cloud.firestore {
     }
 
     // Tempo de estudo por dia: inteiro, em blocos de 30 min e dentro dos
-    // limites que o moderador definiu (limitesTempo; padrão 0 a 8 h). O mínimo
+    // limites que o moderador definiu (limitesTempo; padrão 0 a 16 h). O mínimo
     // semanal depende da estrutura e do progresso: fica no serviço.
     function diaOk(d, k, lim) {
       let v = d.get(k, 0);
-      return v is int && v % 30 == 0 && v >= lim.get('minDia', 0) && v <= lim.get('maxDia', 480);
+      return v is int && v % 30 == 0 && v >= lim.get('minDia', 0) && v <= lim.get('maxDia', 960);
     }
     function disponibilidadeOk() {
       let d = novo().disponibilidade;

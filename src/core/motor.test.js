@@ -46,7 +46,9 @@ describe("blocos de 30 min", () => {
       const { dias, resumo } = planejarSemana({ materias, capacidade, revisoes, prefixo: `c${caso}:` });
       todas(dias).forEach((m) => {
         expect(m.minutos % BLOCO_MIN).toBe(0);
-        expect(m.minutos).toBeGreaterThan(0);
+        // meta de estudo: 60 a 180 min; 30 min só em revisão
+        if (m.tipo === "ciclo") { expect(m.minutos).toBeGreaterThanOrEqual(60); expect(m.minutos).toBeLessThanOrEqual(180); }
+        else expect(m.minutos).toBeGreaterThanOrEqual(30);
       });
       // nenhum dia passa da capacidade (fora a sobrecarga de revisão, sinalizada)
       DIAS.forEach((d) => {
@@ -55,8 +57,13 @@ describe("blocos de 30 min", () => {
         expect(ciclo).toBeLessThanOrEqual(Math.max(0, capacidade[d.k] - rev));
         if (rev > capacidade[d.k]) expect(resumo.sobrecarga).toContain(d.k);
       });
-      // a soma das metas de ciclo é R (há conteúdo pendente em alguma matéria)
-      if (materias.some((m) => m.pendente)) expect(soma(todas(dias).filter((m) => m.tipo === "ciclo"))).toBe(deBlocos(resumo.R));
+      // a soma das metas de ciclo é R, menos no máximo 1 bloco solto por dia
+      // (um bloco sozinho não vira meta de estudo)
+      if (materias.some((m) => m.pendente)) {
+        const ciclo = soma(todas(dias).filter((m) => m.tipo === "ciclo"));
+        expect(ciclo).toBeLessThanOrEqual(deBlocos(resumo.R));
+        expect(ciclo).toBeGreaterThanOrEqual(deBlocos(resumo.R - 7));
+      }
     }
   });
 });
@@ -78,26 +85,27 @@ describe("repartição por peso", () => {
     expect(repartirPorPeso(1, comPos([mat("a", 1), mat("b", 1)]))).toEqual({ a: 1, b: 0 });
   });
 
-  it("bloco mínimo: a matéria de peso 1 recebe 1 bloco, tirado da maior; com revisão na semana, não", () => {
+  it("mínimo: a matéria de peso 1 recebe uma meta de 60 min, tirada da maior; com revisão na semana, não", () => {
     const materias = comPos([mat("a", 3), mat("b", 3), mat("d", 1)]);
-    expect(repartirPorPeso(4, materias)).toEqual({ a: 2, b: 2, d: 0 });
-    const { blocos } = cotaDaSemana(4, materias);
-    expect(blocos).toEqual({ a: 2, b: 1, d: 1 }); // empate: cede a que vem depois no edital
-    expect(cotaDaSemana(4, materias, new Set(["d"])).blocos.d).toBe(0);
-    // na semana: aparece 30 min de estudo ou 30 min de revisão
-    const cap = dispUniforme(0); cap.seg = 120;
+    expect(repartirPorPeso(6, materias)).toEqual({ a: 3, b: 2, d: 1 });
+    const { blocos } = cotaDaSemana(6, materias);
+    expect(blocos).toEqual({ a: 2, b: 2, d: 2 }); // o bloco solto de d vira meta com um bloco de a
+    expect(cotaDaSemana(6, materias, new Set(["d"])).blocos).toEqual({ a: 4, b: 2, d: 0 }); // a revisão conta
+    // na semana: aparece 60 min de estudo ou 30 min de revisão
+    const cap = dispUniforme(0); cap.seg = 180;
     const semana = planejarSemana({ materias, capacidade: cap });
-    expect(porMateria(semana.dias).d).toBe(30);
-    // com revisão de "d" (1 bloco) e um bloco a mais no dia, os 4 livres vão para a e b
-    const comRev = planejarSemana({ materias, capacidade: { ...cap, seg: 150 }, revisoes: [{ k: "seg", blocos: 1, materiaId: "d", revisaoId: "r1" }] });
+    expect(porMateria(semana.dias).d).toBe(60);
+    // com revisão de "d" (1 bloco), os 6 blocos livres vão para a e b
+    const comRev = planejarSemana({ materias, capacidade: { ...cap, seg: 210 }, revisoes: [{ k: "seg", blocos: 1, materiaId: "d", revisaoId: "r1" }] });
     expect(porMateria(comRev.dias).d).toBeUndefined();
     expect(comRev.dias.seg.find((m) => m.materiaId === "d")).toMatchObject({ tipo: "revisao", minutos: 30 });
   });
 
-  it("sem espaço nem para o bloco mínimo, a matéria volta em materiasSemTempo", () => {
-    const cap = dispUniforme(0); cap.seg = 60;
-    const { resumo } = planejarSemana({ materias: comPos([mat("a", 3), mat("b", 2), mat("c", 1)]), capacidade: cap });
-    expect(resumo.materiasSemTempo).toEqual(["c"]);
+  it("sem espaço nem para a meta mínima, a matéria volta em materiasSemTempo", () => {
+    const cap = dispUniforme(0); cap.seg = 60; // uma meta de 60 min: fica com a de maior peso
+    const { dias, resumo } = planejarSemana({ materias: comPos([mat("a", 3), mat("b", 2), mat("c", 1)]), capacidade: cap });
+    expect(porMateria(dias)).toEqual({ a: 60 });
+    expect(resumo.materiasSemTempo).toEqual(["b", "c"]);
   });
 
   it("matéria com todos os tópicos concluídos e sem revisão não recebe bloco", () => {
@@ -111,22 +119,24 @@ describe("repartição por peso", () => {
     expect(todas(dias).every((m) => m.materiaId === "a")).toBe(true);
   });
 
-  it("mudar o tempo diário mantém as proporções entre as matérias (tolerância de 1 bloco)", () => {
+  it("mudar o tempo diário mantém as proporções entre as matérias (tolerância de 2 blocos, a meta mínima)", () => {
     const materias = comPos([mat("a", 3), mat("b", 2), mat("c", 1)]);
     [dispUniforme(60), dispUniforme(90), dispUniforme(150), dispUniforme(240)].forEach((cap) => {
       const m = porMateria(planejarSemana({ materias, capacidade: cap }).dias);
       const total = m.a + m.b + m.c;
-      expect(Math.abs(m.a - (total * 3) / 6)).toBeLessThanOrEqual(BLOCO_MIN);
-      expect(Math.abs(m.b - (total * 2) / 6)).toBeLessThanOrEqual(BLOCO_MIN);
-      expect(Math.abs(m.c - total / 6)).toBeLessThanOrEqual(BLOCO_MIN);
+      expect(Math.abs(m.a - (total * 3) / 6)).toBeLessThanOrEqual(2 * BLOCO_MIN);
+      expect(Math.abs(m.b - (total * 2) / 6)).toBeLessThanOrEqual(2 * BLOCO_MIN);
+      expect(Math.abs(m.c - total / 6)).toBeLessThanOrEqual(2 * BLOCO_MIN);
     });
   });
 });
 
 describe("metas e dias", () => {
-  it("divide os blocos em metas de até maxSessao, iguais: 5 com máximo 2 → 2 + 2 + 1", () => {
-    expect(dividirEmMetas(5, 2)).toEqual([2, 2, 1]);
+  it("divide os blocos em metas de 2 até maxSessao blocos, iguais: 7 com máximo 3 → 3 + 2 + 2", () => {
+    expect(dividirEmMetas(7, 3)).toEqual([3, 2, 2]);
     expect(dividirEmMetas(6, 4)).toEqual([3, 3]);
+    expect(dividirEmMetas(5, 2)).toEqual([2, 2]); // o bloco que sobra vai para o preenchimento do dia
+    expect(dividirEmMetas(1, 4)).toEqual([]); // 30 min sozinho não é meta de estudo
     expect(dividirEmMetas(0, 2)).toEqual([]);
   });
 

@@ -372,7 +372,7 @@ describe("jornadas práticas e edital por aluno", () => {
     expect(m.nome).toBe("FUVEST · Medicina");
     expect(m.materias).toHaveLength((await t.repo.listar("materias")).length);
     expect(m.materias.every((x) => x.peso === 2 && x.maxSessao === 60)).toBe(true);
-    expect(m).toMatchObject({ cargaReferencia: 1200, motorVersao: 2, revisao: { intervalos: [7, 15, 30] } });
+    expect(m).toMatchObject({ cargaReferencia: 1200, motorVersao: 3, revisao: { intervalos: [7, 15, 30] }, limitesTempo: { minDia: 0, maxDia: 960 } });
     expect(m.materias.find((x) => x.materiaId === "geografia").topicos.map((x) => x.topicoId)).toEqual(["g1", "g2"]);
   });
 
@@ -551,7 +551,7 @@ describe("motor de metas: o que o aluno ajusta", () => {
     const disp = (await t.repo.obter("planos", ana)).disponibilidade;
     const op = (d) => ({ tipo: "definirPlano", campos: { disponibilidade: d } });
     await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 225 }))).rejects.toThrow(ErroValidacao);
-    await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 510 }))).rejects.toThrow(ErroValidacao);
+    await expect(t.s.planos.alterar(ana, op({ ...disp, qua: 990 }))).rejects.toThrow(ErroValidacao); // passa de 16 h
     const zero = Object.fromEntries(DIAS.map((d) => [d.k, 0]));
     await expect(t.s.planos.alterar(ana, op({ ...zero, seg: 60 }))).rejects.toThrow(/pelo menos .* para caber ao menos um bloco de cada matéria/);
     // quarta de 3 h para 4 h: o dia fecha em 4 h, tudo em blocos de 30
@@ -627,11 +627,12 @@ describe("motor de metas: o que o aluno ajusta", () => {
     await expect(t.s.estudo.reordenarMeta(ana, "ter", a.id, -1)).rejects.toThrow(ErroPermissao);
   });
 
-  it("tempo extra: 30, 60, 90 ou 120 min", async () => {
+  it("tempo extra: 60, 90 ou 120 min", async () => {
     const ana = await t.uidDe("aluno@curso.com");
     await t.entrar("aluno@curso.com");
     await t.s.estudo.garantirSemana(ana);
     await expect(t.s.estudo.tempoExtra(ana, { materiaId: "biologia", minutos: 45 })).rejects.toThrow(ErroValidacao);
+    await expect(t.s.estudo.tempoExtra(ana, { materiaId: "biologia", minutos: 30 })).rejects.toThrow(ErroValidacao); // meta de estudo começa em 60
     const dia = await t.s.estudo.tempoExtra(ana, { materiaId: "biologia", minutos: 90 });
     const extra = (await t.repo.obter("semanas", ana)).metas[dia.k].find((m) => m.extra);
     expect(extra.minutos).toBe(90);
@@ -659,8 +660,63 @@ describe("motor de metas: o que o aluno ajusta", () => {
   });
 });
 
+describe("Obras literárias só para FUVEST e UNICAMP", () => {
+  it("aparece na semana da Ana (FUVEST) e da Mariana (UNICAMP), não na do Carlos (ENEM MED); não se liga em outra jornada", async () => {
+    const semana = async (email) => {
+      const id = await t.uidDe(email);
+      await t.entrar(email);
+      return Object.values((await t.s.estudo.garantirSemana(id)).metas).flat().map((m) => m.materiaId);
+    };
+    expect(await semana("aluno@curso.com")).toContain("obras-literarias");
+    expect(await semana("mariana@curso.com")).toContain("obras-literarias");
+    expect(await semana("carlos@curso.com")).not.toContain("obras-literarias");
+    await t.entrar("moderador@curso.com");
+    await expect(t.s.planos.alterarJornada("modelo-enem", { tipo: "definirMateria", materiaId: "obras-literarias", campos: { ativa: true } })).rejects.toThrow(/só para FUVEST e UNICAMP/);
+    // mesmo marcada como ativa no plano, fora da FUVEST e da UNICAMP ela não gera metas
+    const carlos = await t.uidDe("carlos@curso.com");
+    const plano = await t.repo.obter("planos", carlos);
+    await t.repo.lote([{ tipo: "mesclar", colecao: "planos", id: carlos, dados: { materias: plano.materias.map((m) => (m.materiaId === "obras-literarias" ? { ...m, ativa: true } : m)) } }]);
+    expect(await semana("carlos@curso.com")).not.toContain("obras-literarias");
+  });
+
+  it("metas de estudo de 60 a 180 min; 30 min só em revisão", async () => {
+    for (const email of ["aluno@curso.com", "carlos@curso.com", "mariana@curso.com"]) {
+      await t.entrar(email);
+      const est = await t.s.estudo.garantirSemana(await t.uidDe(email));
+      Object.values(est.metas).flat().forEach((m) => {
+        if (m.tipo === "ciclo") expect([60, 90, 120, 150, 180]).toContain(m.minutos);
+        else expect(m.minutos % 30).toBe(0);
+      });
+    }
+  });
+});
+
+describe("semana gravada pelo motor anterior", () => {
+  it("metas com tempo quebrado (55 min, 1h20) viram durações válidas, até nos dias que já passaram", async () => {
+    const ana = await t.uidDe("aluno@curso.com");
+    await t.entrar("aluno@curso.com");
+    const est = await t.s.estudo.garantirSemana(ana);
+    agora = new Date(2026, 8, 29, 10, 0); // terça
+    const velha = {
+      ...est, motorVersao: 2,
+      metas: { ...est.metas, seg: [{ id: "v1", tipo: "ciclo", materiaId: "quimica", minutos: 55, done: false }, { id: "v2", tipo: "ciclo", materiaId: "matematica", minutos: 80, done: true, feitoEm: "2026-09-28" }],
+        qua: [{ id: "v3", tipo: "ciclo", materiaId: "geografia", minutos: 35, done: false }] },
+      pendentes: [{ id: "p1", tipo: "ciclo", materiaId: "historia", minutos: 20, done: false }],
+    };
+    await t.repo.lote([{ tipo: "definir", colecao: "semanas", id: ana, dados: JSON.parse(JSON.stringify({ ...velha, alunoId: ana })) }]);
+    const nova = await t.s.estudo.garantirSemana(ana);
+    expect(nova.motorVersao).toBe(3);
+    expect(nova.metas.seg.find((m) => m.id === "v1").minutos).toBe(60); // aberta de dia passado: 55 → 60
+    expect(nova.metas.seg.find((m) => m.id === "v2").minutos).toBe(80); // feita: histórico, fica
+    expect(nova.pendentes[0].minutos).toBe(60);
+    Object.entries(nova.metas).forEach(([k, l]) => l.filter((m) => !m.done && k !== "seg").forEach((m) => {
+      expect(m.tipo === "revisao" ? m.minutos % 30 : m.minutos % 30 + (m.minutos >= 60 ? 0 : 1)).toBe(0);
+    }));
+  });
+});
+
 describe("migração para o motor de blocos e pesos", () => {
-  it("plano e jornada antigos viram v2 com log; a segunda execução não muda nada; o aluno já vê blocos de 30", async () => {
+  it("plano e jornada antigos viram v3 com log; a segunda execução não muda nada; o aluno já vê metas em blocos de 30", async () => {
     const ana = await t.uidDe("aluno@curso.com");
     // simula dados gravados antes do motor novo
     const plano = await t.repo.obter("planos", ana);
@@ -683,7 +739,7 @@ describe("migração para o motor de blocos e pesos", () => {
     await t.entrar("moderador@curso.com");
     expect(await t.s.planos.migrarMotor({ alunoId: ana })).toEqual({ modelos: 1, alunos: 1 });
     const novo = await t.repo.obter("planos", ana);
-    expect(novo.motorVersao).toBe(2);
+    expect(novo.motorVersao).toBe(3);
     expect(novo.materias.every((m) => [1, 2, 3].includes(m.peso) && m.maxSessao === 60)).toBe(true);
     expect(novo.revisao).toEqual({ intervalos: [7, 15, 30] });
     expect(Object.values(novo.disponibilidade).every((v) => v % 30 === 0)).toBe(true);
